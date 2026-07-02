@@ -1,0 +1,56 @@
+name: 'beliq e-invoice validate'
+description: 'Validate EU e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS) in CI against beliq authority-pinned, drift-checked rules. A non-compliant document fails the build.'
+author: 'beliq'
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+inputs:
+  files:
+    description: 'Newline- or comma-separated glob(s) of e-invoice files to validate.'
+    required: false
+    default: '**/*.xml'
+  format:
+    description: 'Force the input syntax: auto, cii, or ubl. Default auto-detects.'
+    required: false
+    default: 'auto'
+  fail-on:
+    description: 'Severity threshold that fails the job: error (default) or warning.'
+    required: false
+    default: 'error'
+  api-key:
+    description: 'Your beliq API key. Pass it from a repository secret.'
+    required: true
+  base-url:
+    description: 'Override the beliq API base URL (self-hosted deployments only).'
+    required: false
+    default: ''
+  cli-version:
+    description: 'Version of beliq-cli to run (an npm dist-tag or exact version).'
+    required: false
+    default: 'latest'
+outputs:
+  total:
+    description: 'Number of files validated.'
+    value: ${{ steps.run.outputs.total }}
+  invalid:
+    description: 'Number of files that failed the threshold.'
+    value: ${{ steps.run.outputs.invalid }}
+  results:
+    description: 'JSON array of per-file results ({ file, status, format, errors, warnings, message }).'
+    value: ${{ steps.run.outputs.results }}
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+    - id: run
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/runner.mjs"
+      env:
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_CLI_VERSION: ${{ inputs.cli-version }}
+        BELIQ_API_KEY: ${{ inputs.api-key }}

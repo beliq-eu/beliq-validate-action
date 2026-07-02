@@ -1,0 +1,26 @@
+{
+  "name": "beliq-validate-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub Action that validates EU e-invoices in CI against beliq authority-pinned rules.",
+  "type": "module",
+  "license": "MIT",
+  "author": "beliq <hello@beliq.eu>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beliq-eu/beliq-validate-action.git"
+  },
+  "engines": {
+    "node": ">=20.15"
+  },
+  "scripts": {
+    "lint": "eslint runner.mjs test",
+    "test": "vitest run",
+    "check": "node --check runner.mjs",
+    "scrub:check": "bash scripts/scrub-check.sh"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "vitest": "^2.1.8"
+  }
+}

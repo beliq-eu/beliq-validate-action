@@ -1,0 +1,30 @@
+{
+  "number": "INV-2026-001",
+  "issueDate": "2026-01-15",
+  "currencyCode": "EUR",
+  "buyerReference": "04011000-12345-06",
+  "seller": {
+    "name": "Seller GmbH",
+    "vatId": "DE123456789",
+    "email": "billing@seller.example",
+    "address": { "street": "Hauptstr. 1", "city": "Berlin", "postalCode": "10115", "countryCode": "DE" }
+  },
+  "buyer": {
+    "name": "Buyer GmbH",
+    "address": { "street": "Marktweg 2", "city": "Munich", "postalCode": "80331", "countryCode": "DE" }
+  },
+  "lines": [
+    {
+      "description": "Consulting",
+      "quantity": 10,
+      "unitCode": "HUR",
+      "unitPrice": 100,
+      "lineTotal": 1000,
+      "vatRate": 19,
+      "vatCategoryCode": "S"
+    }
+  ],
+  "totalNetAmount": 1000,
+  "totalTaxAmount": 190,
+  "totalGrossAmount": 1190
+}

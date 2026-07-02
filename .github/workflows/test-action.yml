@@ -1,0 +1,65 @@
+name: test-action
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Live end-to-end test of the action against the real beliq API. It runs only
+# when the BELIQ_API_KEY repository secret is set, so the workflow is green on
+# forks and before go-live, and turns into a real gate once the operator adds
+# the secret. It proves the CI promise: a non-compliant invoice fails the job.
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: guard
+        run: echo "has_key=${{ secrets.BELIQ_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+      # A known-good fixture is generated from a complete invoice (generation
+      # verifies against the full business rules, so a clean generate is itself
+      # the proof it is valid). The known-bad fixture is committed.
+      - name: build fixtures
+        if: steps.guard.outputs.has_key == 'true'
+        env:
+          BELIQ_API_KEY: ${{ secrets.BELIQ_API_KEY }}
+        run: |
+          mkdir -p fixtures/good fixtures/bad
+          npx -y beliq-cli@latest generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml
+          cp examples/invalid-xrechnung.xml fixtures/bad/invoice.xml
+
+      - name: good fixtures pass
+        id: good
+        if: steps.guard.outputs.has_key == 'true'
+        uses: ./
+        with:
+          files: fixtures/good/*.xml
+          api-key: ${{ secrets.BELIQ_API_KEY }}
+
+      - name: assert good passed
+        if: steps.guard.outputs.has_key == 'true'
+        run: |
+          test "${{ steps.good.outputs.invalid }}" = "0" \
+            || { echo "expected 0 invalid, got '${{ steps.good.outputs.invalid }}'"; exit 1; }
+
+      - name: bad fixtures fail
+        id: bad
+        if: steps.guard.outputs.has_key == 'true'
+        continue-on-error: true
+        uses: ./
+        with:
+          files: fixtures/bad/*.xml
+          api-key: ${{ secrets.BELIQ_API_KEY }}
+
+      - name: assert bad failed
+        if: steps.guard.outputs.has_key == 'true'
+        run: |
+          test "${{ steps.bad.outcome }}" = "failure" \
+            || { echo "expected the action to fail the job on a non-compliant invoice"; exit 1; }
+          test "${{ steps.bad.outputs.invalid }}" -ge "1" \
+            || { echo "expected invalid >= 1, got '${{ steps.bad.outputs.invalid }}'"; exit 1; }
+
+      - name: skipped notice
+        if: steps.guard.outputs.has_key != 'true'
+        run: echo "BELIQ_API_KEY secret not set; skipping the live action test."
