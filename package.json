@@ -20,7 +20,7 @@
     "scrub:check": "bash scripts/scrub-check.sh"
   },
   "devDependencies": {
-    "eslint": "^8.57.0",
+    "eslint": "^10.0.0",
     "vitest": "^4.0.0"
   }
 }
