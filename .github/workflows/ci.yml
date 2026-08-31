@@ -17,3 +17,4 @@ jobs:
       - run: npm run scrub:check
       - run: npm run check
       - run: npm test
+      - run: ./scripts/check-action-pins.sh
