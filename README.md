@@ -61,6 +61,8 @@ Get an API key from your beliq dashboard (the free tier is enough to evaluate) a
 
 Releases are tagged `vMAJOR.MINOR.PATCH`, and a moving `v1` tag tracks the latest 1.x. Pin `@v1` for automatic compatible updates, or a full version (`@v1.0.0`) to freeze it.
 
+Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, which checks the tree at that tag, moves the `v1` alias onto it and cuts the GitHub release. Never move `v1` by hand: the alias resolves in the caller's CI, so it must only ever name a tree those checks passed on.
+
 ## Development
 
 ```bash
@@ -69,6 +71,7 @@ npm run lint
 npm run scrub:check   # no em-dash
 npm run check         # runner.mjs parses
 npm test              # pure-logic unit tests, no network
+./scripts/check-action-pins.sh   # every uses: names a commit SHA
 ```
 
 The live end-to-end test lives in `.github/workflows/test-action.yml`. It runs only when the `BELIQ_API_KEY` secret is present, validates a generated good fixture (expects 0 invalid) and a committed bad fixture (expects the job to fail), and so proves the action red-Xes a non-compliant invoice.

@@ -1,0 +1,74 @@
+name: Release
+
+# Cuts the GitHub release for a v*.*.* tag and moves the floating major alias
+# (v1 for v1.2.3) that consumers pin. Every check runs at the tag, so the tree
+# the alias ends up naming is one that was verified. A sweep of main cannot see
+# what the alias serves, so this workflow is the only thing that keeps the two
+# in step.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write # create the release, force-move the major alias
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Scrub check (no em-dash)
+        run: npm run scrub:check
+
+      - name: 'Every uses: is SHA-pinned'
+        run: ./scripts/check-action-pins.sh
+
+      - name: package.json version matches the tag
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(node -p "require('./package.json').version")"
+          test "$want" = "$have" || {
+            echo "tag says $want, package.json says $have"
+            exit 1
+          }
+
+      # The alias moves before the release is cut. A missing release on a moved
+      # alias is cosmetic and the rerun fixes it; a release standing over a
+      # stale alias reads as shipped while consumers still pull the old tree.
+      - name: Move the major alias
+        run: |
+          major="${GITHUB_REF_NAME%%.*}"
+          git config user.name 'beliq'
+          git config user.email 'hello@beliq.eu'
+          git tag -f -a "$major" -m "beliq-validate-action $GITHUB_REF_NAME" "${GITHUB_REF_NAME}^{commit}"
+          git push --force origin "refs/tags/$major"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
