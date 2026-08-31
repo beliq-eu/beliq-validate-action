@@ -4,3 +4,8 @@ node_modules
 coverage
 package-lock.json
 fixtures
+
+# Local secrets
+.env
+.env.*
+!.env.example
