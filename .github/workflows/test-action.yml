@@ -2,14 +2,18 @@ name: test-action
 on:
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 # Live end-to-end test of the action against the real beliq API. It proves the
 # CI promise: a non-compliant invoice fails the job.
 #
 # The body spends 3 documents (one generate for the good fixture, then one
-# validate per fixture) against a key whose plan allows 20 a month, so the
-# preflight job decides whether the run can complete before it spends anything.
+# validate per fixture) against a key whose plan allows 20 a month, shared with
+# n8n-nodes-beliq and activepieces-beliq. Running it on pull_request as well as
+# push doubled the burn for a second reading of the same tree, so it runs on the
+# merge and on demand; `ci.yml` is what gates a pull request. The preflight job
+# then decides whether a run can complete before it spends anything.
+#
 # Gating at job level rather than per step means a run that cannot be exercised
 # reports as skipped, which no one can misread as verified.
 jobs:
