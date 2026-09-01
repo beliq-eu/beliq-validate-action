@@ -27,6 +27,7 @@
       "vatCategoryCode": "S"
     }
   ],
+  "taxSummary": [{ "vatCategoryCode": "S", "vatRate": 19, "taxableAmount": 1000, "taxAmount": 190 }],
   "paymentMeans": { "typeCode": "58", "iban": "DE89370400440532013000" },
   "totalNetAmount": 1000,
   "totalTaxAmount": 190,
