@@ -24,10 +24,12 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
-          cache: npm
 
+      # package-lock.json is gitignored here, so there is no lockfile for a
+      # clean install or for setup-node's cache to key on. ci.yml installs the
+      # same way.
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Lint
         run: npm run lint

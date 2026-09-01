@@ -29,6 +29,22 @@ jobs:
           npx -y beliq-cli@latest generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml
           cp examples/invalid-xrechnung.xml fixtures/bad/invoice.xml
 
+      # beliq-cli renders an API error as "API error 422 (INVALID_INVOICE):
+      # Generated invoice failed validation" and drops the rule list, which is
+      # the only thing that says WHY. Ask the API directly when the build fails.
+      - name: report why generate was refused
+        if: failure() && steps.guard.outputs.has_key == 'true'
+        env:
+          BELIQ_API_KEY: ${{ secrets.BELIQ_API_KEY }}
+        run: |
+          jq -n --slurpfile inv examples/invoice.json \
+            '{standard: "xrechnung", output: "xml", verify: true, invoice: $inv[0]}' > /tmp/gen.json
+          curl -sS -X POST https://api.beliq.eu/v1/generate \
+            -H "Authorization: Bearer $BELIQ_API_KEY" \
+            -H 'Content-Type: application/json' \
+            --data @/tmp/gen.json | head -c 4000
+          echo
+
       - name: good fixtures pass
         id: good
         if: steps.guard.outputs.has_key == 'true'
