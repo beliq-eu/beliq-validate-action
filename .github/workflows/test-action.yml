@@ -4,36 +4,100 @@ on:
     branches: [main]
   pull_request:
 
-# Live end-to-end test of the action against the real beliq API. It runs only
-# when the BELIQ_API_KEY repository secret is set, so the workflow is green on
-# forks and before go-live, and turns into a real gate once the operator adds
-# the secret. It proves the CI promise: a non-compliant invoice fails the job.
+# Live end-to-end test of the action against the real beliq API. It proves the
+# CI promise: a non-compliant invoice fails the job.
+#
+# The body spends 3 documents (one generate for the good fixture, then one
+# validate per fixture) against a key whose plan allows 20 a month, so the
+# preflight job decides whether the run can complete before it spends anything.
+# Gating at job level rather than per step means a run that cannot be exercised
+# reports as skipped, which no one can misread as verified.
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      # GET /v1/me is quota-exempt, so asking what is left costs nothing. A key
+      # that is absent (forks, and before go-live) and a quota that is spent are
+      # the same condition from the test's point of view: the contract could not
+      # be checked, which is not the same as the contract being broken.
+      - id: decide
+        env:
+          BELIQ_API_KEY: ${{ secrets.BELIQ_API_KEY }}
+        run: |
+          set -uo pipefail
+
+          # generate + validate(good) + validate(bad)
+          needed=3
+
+          if [ -z "${BELIQ_API_KEY:-}" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "BELIQ_API_KEY is not set; skipping the live action test."
+            exit 0
+          fi
+
+          body="$(curl -sS --max-time 30 \
+            -H "Authorization: Bearer $BELIQ_API_KEY" \
+            https://api.beliq.eu/v1/me)" || body=''
+          remaining="$(printf '%s' "$body" | jq -r '.data.quota.remaining // empty')" || remaining=''
+          resets="$(printf '%s' "$body" | jq -r '.data.quota.resetsAt // empty')" || resets='unknown'
+
+          # An unreadable answer is not a reason to skip: /v1/me is an
+          # optimisation, and a real API outage should surface as a red live job
+          # rather than a quiet one.
+          if ! printf '%s' "$remaining" | grep -qE '^[0-9]+$'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "could not read the remaining quota from /v1/me; running the live test anyway"
+            exit 0
+          fi
+
+          echo "quota remaining: $remaining, resets $resets"
+          if [ "$remaining" -lt "$needed" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::beliq API monthly quota is spent ($remaining of $needed documents left, resets $resets), so the live contract was NOT verified by this run."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   live:
+    needs: preflight
+    if: needs.preflight.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - id: guard
-        run: echo "has_key=${{ secrets.BELIQ_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
-
       # A known-good fixture is generated from a complete invoice (generation
       # verifies against the full business rules, so a clean generate is itself
       # the proof it is valid). The known-bad fixture is committed.
+      #
+      # Another repo's run can take the last documents between the preflight and
+      # here, so a quota 429 at this point is still the could-not-run arm, not a
+      # failure. Any other error is a real one and fails the job.
       - name: build fixtures
-        if: steps.guard.outputs.has_key == 'true'
+        id: fixtures
         env:
           BELIQ_API_KEY: ${{ secrets.BELIQ_API_KEY }}
         run: |
+          set -uo pipefail
           mkdir -p fixtures/good fixtures/bad
-          npx -y beliq-cli@latest generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml
+          if ! out="$(npx -y beliq-cli@latest generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml 2>&1)"; then
+            printf '%s\n' "$out"
+            if printf '%s' "$out" | grep -q 'QUOTA_EXCEEDED'; then
+              echo "quota_spent=true" >> "$GITHUB_OUTPUT"
+              echo "::warning::beliq API monthly quota went to zero mid-run, so the live contract was NOT verified by this run."
+              exit 0
+            fi
+            exit 1
+          fi
+          printf '%s\n' "$out"
           cp examples/invalid-xrechnung.xml fixtures/bad/invoice.xml
 
       # beliq-cli renders an API error as "API error 422 (INVALID_INVOICE):
       # Generated invoice failed validation" and drops the rule list, which is
       # the only thing that says WHY. Ask the API directly when the build fails.
       - name: report why generate was refused
-        if: failure() && steps.guard.outputs.has_key == 'true'
+        if: failure()
         env:
           BELIQ_API_KEY: ${{ secrets.BELIQ_API_KEY }}
         run: |
@@ -47,21 +111,21 @@ jobs:
 
       - name: good fixtures pass
         id: good
-        if: steps.guard.outputs.has_key == 'true'
+        if: steps.fixtures.outputs.quota_spent != 'true'
         uses: ./
         with:
           files: fixtures/good/*.xml
           api-key: ${{ secrets.BELIQ_API_KEY }}
 
       - name: assert good passed
-        if: steps.guard.outputs.has_key == 'true'
+        if: steps.fixtures.outputs.quota_spent != 'true'
         run: |
           test "${{ steps.good.outputs.invalid }}" = "0" \
             || { echo "expected 0 invalid, got '${{ steps.good.outputs.invalid }}'"; exit 1; }
 
       - name: bad fixtures fail
         id: bad
-        if: steps.guard.outputs.has_key == 'true'
+        if: steps.fixtures.outputs.quota_spent != 'true'
         continue-on-error: true
         uses: ./
         with:
@@ -69,13 +133,9 @@ jobs:
           api-key: ${{ secrets.BELIQ_API_KEY }}
 
       - name: assert bad failed
-        if: steps.guard.outputs.has_key == 'true'
+        if: steps.fixtures.outputs.quota_spent != 'true'
         run: |
           test "${{ steps.bad.outcome }}" = "failure" \
             || { echo "expected the action to fail the job on a non-compliant invoice"; exit 1; }
           test "${{ steps.bad.outputs.invalid }}" -ge "1" \
             || { echo "expected invalid >= 1, got '${{ steps.bad.outputs.invalid }}'"; exit 1; }
-
-      - name: skipped notice
-        if: steps.guard.outputs.has_key != 'true'
-        run: echo "BELIQ_API_KEY secret not set; skipping the live action test."
