@@ -6,11 +6,14 @@
   "seller": {
     "name": "Seller GmbH",
     "vatId": "DE123456789",
+    "contactName": "Anna Muster",
     "email": "billing@seller.example",
+    "phone": "+49 30 1234567",
     "address": { "street": "Hauptstr. 1", "city": "Berlin", "postalCode": "10115", "countryCode": "DE" }
   },
   "buyer": {
     "name": "Buyer GmbH",
+    "email": "ap@buyer.example",
     "address": { "street": "Marktweg 2", "city": "Munich", "postalCode": "80331", "countryCode": "DE" }
   },
   "lines": [
@@ -24,6 +27,7 @@
       "vatCategoryCode": "S"
     }
   ],
+  "paymentMeans": { "typeCode": "58", "iban": "DE89370400440532013000" },
   "totalNetAmount": 1000,
   "totalTaxAmount": 190,
   "totalGrossAmount": 1190
