@@ -51,7 +51,7 @@ function firstLine(text) {
 // The CLI contract: 0 valid, 1 invalid (per --fail-on), 2 usage, 3 API, 4 I/O.
 export function classify(file, exitCode, stdout) {
   if (exitCode === 0 || exitCode === 1) {
-    let parsed = null
+    let parsed
     try {
       parsed = JSON.parse(stdout)
     } catch {
