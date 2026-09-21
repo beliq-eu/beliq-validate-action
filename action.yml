@@ -29,9 +29,14 @@ inputs:
     required: false
     default: ''
   cli-version:
-    description: 'Version of beliq-cli to run (an npm dist-tag or exact version).'
+    description: >-
+      Version of beliq-cli to run (an exact version or an npm dist-tag).
+      Defaults to the exact version this action release was tested against, so
+      pinning the action also pins the validation logic. Pass `latest` to
+      follow the CLI instead.
     required: false
-    default: 'latest'
+    # renovate: datasource=npm depName=beliq-cli
+    default: '0.2.2'
 outputs:
   total:
     description: 'Number of files validated.'

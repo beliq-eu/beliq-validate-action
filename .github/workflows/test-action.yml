@@ -90,7 +90,8 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p fixtures/good fixtures/bad
-          if ! out="$(npx -y beliq-cli@latest generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml 2>&1)"; then
+          # renovate: datasource=npm depName=beliq-cli
+          if ! out="$(npx -y beliq-cli@0.2.2 generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml 2>&1)"; then
             printf '%s\n' "$out"
             if printf '%s' "$out" | grep -q 'QUOTA_EXCEEDED'; then
               echo "quota_spent=true" >> "$GITHUB_OUTPUT"

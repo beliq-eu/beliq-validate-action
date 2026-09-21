@@ -41,7 +41,7 @@ Get an API key from your beliq dashboard (the free tier is enough to evaluate) a
 | `fail-on` | no | `error` | Severity threshold that fails the job: `error` or `warning`. |
 | `api-key` | yes | | Your beliq API key. Pass it from a repository secret. |
 | `base-url` | no | | Override the beliq API base URL (self-hosted deployments only). |
-| `cli-version` | no | `latest` | Version of `beliq-cli` to run (an npm dist-tag or exact version). |
+| `cli-version` | no | `0.2.2` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
 
 ## Outputs
 
@@ -59,7 +59,9 @@ Get an API key from your beliq dashboard (the free tier is enough to evaluate) a
 
 ## Versioning
 
-Releases are tagged `vMAJOR.MINOR.PATCH`, and a moving `v1` tag tracks the latest 1.x. Pin `@v1` for automatic compatible updates, or a full version (`@v1.0.0`) to freeze it.
+Releases are tagged `vMAJOR.MINOR.PATCH`, and a moving `v1` tag tracks the latest 1.x. Pin `@v1` for automatic compatible updates, or a full version (`@v1.1.0`) to freeze it.
+
+Freezing means the whole thing. The validation itself runs in `beliq-cli`, which the action installs at run time, so a floating CLI would keep changing under a frozen action tag. Each release therefore defaults `cli-version` to one exact CLI version, and that default is part of what the tag freezes. Renovate raises a PR here when a newer `beliq-cli` ships, so the pin moves on a reviewed release rather than silently on every run. Set `cli-version` yourself to override it either way, including to `latest`.
 
 Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, which checks the tree at that tag, moves the `v1` alias onto it and cuts the GitHub release. Never move `v1` by hand: the alias resolves in the caller's CI, so it must only ever name a tree those checks passed on.
 

@@ -10,6 +10,7 @@ import {
   expandFiles,
   skippedDirsFor,
   DEFAULT_FILES,
+  DEFAULT_CLI_VERSION,
 } from '../runner.mjs'
 
 // Pure-logic tests: no network, no CLI. The runner's I/O (spawning the CLI,
@@ -161,5 +162,93 @@ describe('the files default is written in two files', () => {
     const declared = actionYml.match(/ {2}files:[\s\S]*?default: '([^']+)'/)
     expect(declared, 'action.yml has no files default').not.toBeNull()
     expect(declared[1]).toBe(DEFAULT_FILES)
+  })
+})
+
+describe('the beliq-cli version is written in three files', () => {
+  const repo = new URL('../', import.meta.url)
+  const read = (rel) => readFile(new URL(rel, repo), 'utf8')
+
+  // Where the pin lives, and how each file spells it. Adding a fourth site
+  // means adding it here and to renovate.json's managerFilePatterns; the last
+  // test in this block fails if the two lists disagree.
+  const sites = [
+    { path: 'action.yml', spelling: (v) => `default: '${v}'` },
+    { path: 'runner.mjs', spelling: (v) => `DEFAULT_CLI_VERSION = '${v}'` },
+    { path: '.github/workflows/test-action.yml', spelling: (v) => `beliq-cli@${v}` },
+  ]
+
+  it.each(sites)('$path pins $DEFAULT_CLI_VERSION', async ({ path, spelling }) => {
+    expect(await read(path)).toContain(spelling(DEFAULT_CLI_VERSION))
+  })
+
+  it('no beliq-cli@latest survives anywhere', async () => {
+    // README.md:62 promises that a full version tag freezes behaviour. The
+    // validation runs in the CLI, so one `latest` left behind unfreezes it.
+    for (const { path } of sites) {
+      expect(await read(path), `${path} still floats the CLI`).not.toMatch(/beliq-cli@latest|'latest'/)
+    }
+  })
+})
+
+describe('the Renovate custom manager reads all three pins', () => {
+  const repo = new URL('../', import.meta.url)
+  const read = (rel) => readFile(new URL(rel, repo), 'utf8')
+
+  async function manager() {
+    const config = JSON.parse(await read('renovate.json'))
+    const [only, ...rest] = config.customManagers ?? []
+    expect(only, 'renovate.json declares no customManagers').toBeDefined()
+    expect(rest, 'this test assumes exactly one custom manager').toHaveLength(0)
+    return only
+  }
+
+  // `/^\.github/workflows/test-action\.yml$/` back to a plain path. Renovate's
+  // patterns are anchored literals here on purpose; a pattern that is not one
+  // fails this conversion rather than being silently half-read.
+  function patternToPath(pattern) {
+    const m = pattern.match(/^\/\^(.+)\$\/$/)
+    expect(m, `managerFilePatterns entry is not an anchored literal: ${pattern}`).not.toBeNull()
+    return m[1].replace(/\\(.)/g, '$1')
+  }
+
+  it('extracts npm/beliq-cli and the pinned version from every file it covers', async () => {
+    const { matchStrings, managerFilePatterns } = await manager()
+    expect(matchStrings).toHaveLength(1)
+    const paths = managerFilePatterns.map(patternToPath)
+    expect(paths.length).toBeGreaterThan(0)
+
+    for (const path of paths) {
+      // A fresh regex per file: /g carries lastIndex between calls.
+      const found = [...(await read(path)).matchAll(new RegExp(matchStrings[0], 'g'))]
+      expect(found, `the manager's regex matches nothing in ${path}`).toHaveLength(1)
+      expect(found[0].groups).toMatchObject({
+        datasource: 'npm',
+        depName: 'beliq-cli',
+        currentValue: DEFAULT_CLI_VERSION,
+      })
+    }
+  })
+
+  it('covers every file that carries a marker comment', async () => {
+    // The manager is only as wide as its file list. A pin added with a marker
+    // but without the list entry would never be updated, which is the freeze
+    // this manager exists to prevent.
+    const { managerFilePatterns } = await manager()
+    const covered = new Set(managerFilePatterns.map(patternToPath))
+    const candidates = [
+      'action.yml',
+      'runner.mjs',
+      'README.md',
+      'package.json',
+      '.github/workflows/test-action.yml',
+      '.github/workflows/ci.yml',
+      '.github/workflows/release.yml',
+    ]
+    for (const path of candidates) {
+      const marked = /renovate: datasource=/.test(await read(path))
+      expect(marked, `${path} carries a marker comment but renovate.json does not list it`)
+        .toBe(covered.has(path))
+    }
   })
 })

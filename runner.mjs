@@ -27,6 +27,15 @@ const SKIPPED_DIRS = ['node_modules', 'vendor', 'dist']
 /** The default the `files` input declares in action.yml. Kept in step by a test. */
 export const DEFAULT_FILES = '**/*.xml'
 
+// The CLI version the action runs when the caller does not name one. It is an
+// exact version, not `latest`: README.md promises that pinning a full action
+// version freezes behaviour, and a floating CLI breaks that promise on a tag
+// that is never rebuilt. The same version is written in action.yml and in
+// .github/workflows/test-action.yml; a test binds all three, and the marker
+// comment above each one is what lets Renovate move them together.
+// renovate: datasource=npm depName=beliq-cli
+export const DEFAULT_CLI_VERSION = '0.2.2'
+
 export function parseGlobs(input) {
   return String(input ?? '')
     .split(/[\n,]+/)
@@ -157,7 +166,7 @@ export async function main() {
   const failOn = FAIL_ON.has(failOnRaw) ? failOnRaw : 'error'
   const formatRaw = (process.env.INPUT_FORMAT || 'auto').trim()
   const format = FORMATS.has(formatRaw) ? formatRaw : 'auto'
-  const cliVersion = (process.env.INPUT_CLI_VERSION || 'latest').trim() || 'latest'
+  const cliVersion = (process.env.INPUT_CLI_VERSION || DEFAULT_CLI_VERSION).trim() || DEFAULT_CLI_VERSION
   const baseUrl = (process.env.INPUT_BASE_URL || '').trim()
 
   const files = await expandFiles(globs)
