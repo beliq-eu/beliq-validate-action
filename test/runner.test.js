@@ -178,7 +178,7 @@ describe('the beliq-cli version is written in three files', () => {
     { path: '.github/workflows/test-action.yml', spelling: (v) => `beliq-cli@${v}` },
   ]
 
-  it.each(sites)('$path pins $DEFAULT_CLI_VERSION', async ({ path, spelling }) => {
+  it.each(sites)('$path pins the version runner.mjs exports', async ({ path, spelling }) => {
     expect(await read(path)).toContain(spelling(DEFAULT_CLI_VERSION))
   })
 
