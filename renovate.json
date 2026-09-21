@@ -1,4 +1,18 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>beliq-eu/.github:automerge"]
+  "extends": ["local>beliq-eu/.github:automerge"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "beliq-cli is not a dependency of this repo, it is installed at run time by `npx`, so no manager reads the version this action pins. Without this the pin would freeze: the action would go on installing 0.2.2 forever while the CLI moved on, which is worse than the floating `latest` it replaced. The version is written in three places (action.yml's cli-version default, DEFAULT_CLI_VERSION in runner.mjs, and the npx call that builds the live smoke's fixture in test-action.yml) and each carries the marker comment this matches, so all three move in one PR. test/runner.test.js checks this regex against all three files, so a file that loses its marker reds the build instead of quietly dropping out of the manager.",
+      "managerFilePatterns": [
+        "/^action\\.yml$/",
+        "/^runner\\.mjs$/",
+        "/^\\.github/workflows/test-action\\.yml$/"
+      ],
+      "matchStrings": [
+        "renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>[a-z0-9@/._-]+?)\\s+[^\\n]*?(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ]
+    }
+  ]
 }
