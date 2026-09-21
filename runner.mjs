@@ -15,6 +15,18 @@ const FORMATS = new Set(['auto', 'cii', 'ubl'])
 // document could produce a long error list. 16 MiB is well clear of that.
 const MAX_BUFFER = 16 * 1024 * 1024
 
+// The default glob is `**/*.xml`, which in a consumer's checkout also matches
+// every XML file vendored under these directories: fixtures inside an installed
+// package, a Composer tree, a build output. Each match is one billed validate
+// call against the caller's key and monthly quota, so they are skipped.
+//
+// `.git` needs no entry: node's fs.glob does not match dotted path segments
+// under `**`.
+const SKIPPED_DIRS = ['node_modules', 'vendor', 'dist']
+
+/** The default the `files` input declares in action.yml. Kept in step by a test. */
+export const DEFAULT_FILES = '**/*.xml'
+
 export function parseGlobs(input) {
   return String(input ?? '')
     .split(/[\n,]+/)
@@ -82,10 +94,21 @@ export function renderSummary(results) {
   ].join('\n')
 }
 
-async function expandFiles(globs) {
+/**
+ * Which SKIPPED_DIRS apply to one pattern. A pattern that names a directory
+ * outright means it, so `vendor/invoices/*.xml` still resolves; only an
+ * incidental sweep into one is dropped.
+ */
+export function skippedDirsFor(pattern) {
+  return SKIPPED_DIRS.filter((dir) => !String(pattern).includes(dir))
+}
+
+export async function expandFiles(globs) {
   const seen = new Set()
   for (const pattern of globs) {
+    const skipped = skippedDirsFor(pattern)
     for await (const entry of glob(pattern)) {
+      if (entry.split(/[\\/]/).some((segment) => skipped.includes(segment))) continue
       seen.add(entry)
     }
   }
@@ -129,7 +152,7 @@ export async function main() {
     return
   }
 
-  const globs = parseGlobs(process.env.INPUT_FILES || '**/*.xml')
+  const globs = parseGlobs(process.env.INPUT_FILES || DEFAULT_FILES)
   const failOnRaw = (process.env.INPUT_FAIL_ON || 'error').trim()
   const failOn = FAIL_ON.has(failOnRaw) ? failOnRaw : 'error'
   const formatRaw = (process.env.INPUT_FORMAT || 'auto').trim()

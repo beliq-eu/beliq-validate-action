@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { parseGlobs, classify, aggregate, renderSummary } from '../runner.mjs'
+import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  parseGlobs,
+  classify,
+  aggregate,
+  renderSummary,
+  expandFiles,
+  skippedDirsFor,
+  DEFAULT_FILES,
+} from '../runner.mjs'
 
 // Pure-logic tests: no network, no CLI. The runner's I/O (spawning the CLI,
 // expanding the glob, writing the step summary/outputs) is exercised live in
@@ -77,5 +88,78 @@ describe('renderSummary', () => {
   })
   it('shows the reason for an errored file', () => {
     expect(renderSummary([classify('a', 3, '')])).toContain('API error')
+  })
+})
+
+describe('the default glob does not sweep the caller for billed calls', () => {
+  // The action runs in someone else's checkout with their key, and every file
+  // the glob returns is one validate call against their monthly quota. `**/*.xml`
+  // otherwise matches the XML fixtures inside an installed npm package, a
+  // Composer vendor tree and a build output.
+
+  /** A throwaway tree with one real invoice and one of each trap. */
+  async function fixtureTree() {
+    const root = await mkdtemp(join(tmpdir(), 'beliq-glob-'))
+    for (const dir of ['node_modules/pkg', 'vendor/lib', 'dist', 'invoices', '.git']) {
+      await mkdir(join(root, dir), { recursive: true })
+    }
+    for (const file of [
+      'invoices/real.xml',
+      'node_modules/pkg/fixture.xml',
+      'vendor/lib/fixture.xml',
+      'dist/built.xml',
+      '.git/config.xml',
+    ]) {
+      await writeFile(join(root, file), '<Invoice/>')
+    }
+    return root
+  }
+
+  async function expandIn(root, globs) {
+    const cwd = process.cwd()
+    process.chdir(root)
+    try {
+      return await expandFiles(globs)
+    } finally {
+      process.chdir(cwd)
+    }
+  }
+
+  it('skips node_modules, vendor and dist under the default glob', async () => {
+    const root = await fixtureTree()
+    expect(await expandIn(root, [DEFAULT_FILES])).toEqual(['invoices/real.xml'])
+  })
+
+  it('finds those same files when the exclusion is lifted, so the fixture is real', async () => {
+    // Without this, the test above would also pass on a glob that matched nothing.
+    const root = await fixtureTree()
+    const all = await expandIn(root, ['node_modules/**/*.xml', 'vendor/**/*.xml', 'dist/*.xml'])
+    expect(all).toEqual(['dist/built.xml', 'node_modules/pkg/fixture.xml', 'vendor/lib/fixture.xml'])
+  })
+
+  it('honours a glob that names an excluded directory outright', async () => {
+    const root = await fixtureTree()
+    expect(await expandIn(root, ['vendor/lib/*.xml'])).toEqual(['vendor/lib/fixture.xml'])
+  })
+
+  it('leaves .git to node, which does not match dotted segments under **', async () => {
+    const root = await fixtureTree()
+    expect(await expandIn(root, [DEFAULT_FILES])).not.toContain('.git/config.xml')
+  })
+
+  it('drops only the named directories from a pattern', () => {
+    expect(skippedDirsFor('**/*.xml')).toEqual(['node_modules', 'vendor', 'dist'])
+    expect(skippedDirsFor('vendor/**/*.xml')).toEqual(['node_modules', 'dist'])
+  })
+})
+
+describe('the files default is written in two files', () => {
+  it('action.yml and runner.mjs declare the same one', async () => {
+    // action.yml declares `default:` for the input; runner.mjs re-defaults
+    // independently for an empty INPUT_FILES. Nothing but this binds them.
+    const actionYml = await readFile(new URL('../action.yml', import.meta.url), 'utf8')
+    const declared = actionYml.match(/ {2}files:[\s\S]*?default: '([^']+)'/)
+    expect(declared, 'action.yml has no files default').not.toBeNull()
+    expect(declared[1]).toBe(DEFAULT_FILES)
   })
 })
