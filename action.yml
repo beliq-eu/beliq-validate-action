@@ -1,5 +1,5 @@
 name: 'beliq e-invoice validate'
-description: 'Validate EU e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS) in CI against beliq authority-pinned, drift-checked rules. A non-compliant document fails the build.'
+description: 'Validate EN 16931 e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS) in CI. A non-compliant document fails the build.'
 author: 'beliq'
 branding:
   icon: 'check-circle'

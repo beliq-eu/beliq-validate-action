@@ -252,3 +252,18 @@ describe('the Renovate custom manager reads all three pins', () => {
     }
   })
 })
+
+describe('action.yml stays publishable to the GitHub Marketplace', () => {
+  // The Marketplace refuses a release whose action.yml description is 125
+  // characters or longer, and it only says so in the Edit release dialog,
+  // after the tag is cut and the release is already published. v1.1.0 was
+  // refused at 166 characters and needed a whole extra release to fix.
+  const MARKETPLACE_DESCRIPTION_LIMIT = 125
+
+  it(`declares a description shorter than ${MARKETPLACE_DESCRIPTION_LIMIT} characters`, async () => {
+    const actionYml = await readFile(new URL('../action.yml', import.meta.url), 'utf8')
+    const declared = actionYml.match(/^description: '([^']+)'$/m)
+    expect(declared, 'action.yml has no top-level description').not.toBeNull()
+    expect(declared[1].length).toBeLessThan(MARKETPLACE_DESCRIPTION_LIMIT)
+  })
+})
