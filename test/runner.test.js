@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   parseGlobs,
-  classify,
+  classifyRun,
+  validateAll,
+  FILES_PER_RUN,
   aggregate,
   renderSummary,
   expandFiles,
@@ -26,6 +29,14 @@ const invalidJson = JSON.stringify({
   warnings: [{ ruleId: 'BR-CL-01', severity: 'warning', message: 'odd code' }],
 })
 
+// Printed by `npx beliq-cli@0.2.2 validate inv/a.xml inv/b.xml inv/c.xml
+// inv/d.xml --json` against a local stub API (exit 3, because c.xml errored).
+const batchReport = readFileSync(new URL('./fixtures/cli-0.2.2-batch.json', import.meta.url), 'utf8')
+const batchFiles = ['inv/a.xml', 'inv/b.xml', 'inv/c.xml', 'inv/d.xml']
+
+/** One file through classifyRun, for the tests that only need a row. */
+const one = (file, exitCode, stdout, stderr) => classifyRun([file], exitCode, stdout, stderr).results[0]
+
 describe('parseGlobs', () => {
   it('splits on commas and newlines and trims', () => {
     expect(parseGlobs('a.xml, b.xml\n c/*.xml')).toEqual(['a.xml', 'b.xml', 'c/*.xml'])
@@ -39,56 +50,132 @@ describe('parseGlobs', () => {
   })
 })
 
-describe('classify', () => {
+describe('classifyRun, one file', () => {
   it('exit 0 with a valid result is a pass with its counts', () => {
-    const r = classify('a.xml', 0, validJson)
-    expect(r).toMatchObject({ file: 'a.xml', status: 'pass', format: 'cii', errors: 0, warnings: 0 })
+    expect(one('a.xml', 0, validJson)).toMatchObject({ file: 'a.xml', status: 'pass', format: 'cii', errors: 0, warnings: 0 })
   })
   it('exit 1 with an invalid result is a fail carrying the counts', () => {
-    const r = classify('b.xml', 1, invalidJson)
-    expect(r).toMatchObject({ status: 'fail', format: 'ubl', errors: 1, warnings: 1 })
+    expect(one('b.xml', 1, invalidJson)).toMatchObject({ status: 'fail', format: 'ubl', errors: 1, warnings: 1 })
   })
-  it('exit 3 is an API error', () => {
-    expect(classify('c.xml', 3, '').message).toBe('API error')
-    expect(classify('c.xml', 3, '').status).toBe('error')
+  it('exit 3 is an API error carrying the first stderr line', () => {
+    const run = classifyRun(['c.xml'], 3, '', 'beliq: API error 401 (INVALID_API_KEY): Invalid API key\n')
+    expect(run.results[0]).toMatchObject({ status: 'error', message: 'API error: beliq: API error 401 (INVALID_API_KEY): Invalid API key' })
+    expect(run.failed).toBe(true)
   })
   it('exit 2 is a usage error and exit 4 is an I/O error', () => {
-    expect(classify('d.xml', 2, '').message).toBe('usage error')
-    expect(classify('e.xml', 4, '').message).toBe('I/O error')
+    expect(one('d.xml', 2, '').message).toBe('usage error')
+    expect(one('e.xml', 4, '').message).toBe('I/O error')
   })
-  it('tolerates non-JSON stdout on a pass/fail exit', () => {
-    const r = classify('f.xml', 1, 'not json')
-    expect(r).toMatchObject({ status: 'fail', format: '', errors: 0, warnings: 0 })
+  it('exit 1 without a verdict is an error, not a failed document', () => {
+    // beliq-cli 0.2.2 exits 1 with empty stdout when the API cannot be reached.
+    const run = classifyRun(['f.xml'], 1, '', 'beliq: unexpected error: fetch failed\n')
+    expect(run.results[0]).toMatchObject({ status: 'error', message: 'no verdict (exit 1): beliq: unexpected error: fetch failed' })
+    expect(run.failed).toBe(true)
+  })
+  it('exit 0 with unparseable stdout is not a pass either', () => {
+    expect(one('g.xml', 0, 'not json').status).toBe('error')
+  })
+})
+
+describe('classifyRun, a batch', () => {
+  it('maps every row of the CLI batch report to its file', () => {
+    const { results, failed } = classifyRun(batchFiles, 3, batchReport)
+    expect(failed).toBe(false)
+    expect(results).toEqual([
+      { file: 'inv/a.xml', status: 'pass', format: 'cii', errors: 0, warnings: 0, message: '' },
+      { file: 'inv/b.xml', status: 'fail', format: 'cii', errors: 1, warnings: 0, message: '' },
+      { file: 'inv/c.xml', status: 'error', format: '', errors: 0, warnings: 0, message: 'API error 400 (PARSE_FAILED): Not an XML document' },
+      { file: 'inv/d.xml', status: 'pass', format: 'ubl', errors: 0, warnings: 1, message: '' },
+    ])
+  })
+  it('marks a requested file the report does not mention as an error', () => {
+    const { results } = classifyRun([...batchFiles, 'inv/e.xml'], 3, batchReport)
+    expect(results[4]).toMatchObject({ file: 'inv/e.xml', status: 'error', message: 'the CLI reported no result for this file' })
+  })
+  it('gives every file the reason when the run failed as a whole', () => {
+    // A 401 stops a CLI batch before it prints a report.
+    const { results, failed } = classifyRun(batchFiles, 3, '', 'beliq: API error 401 (INVALID_API_KEY): Invalid API key\n')
+    expect(failed).toBe(true)
+    expect(results.map((r) => r.status)).toEqual(['error', 'error', 'error', 'error'])
+    expect(results[3].message).toContain('INVALID_API_KEY')
+  })
+  it('does not read a bare validation result as the verdict for several files', () => {
+    const { results, failed } = classifyRun(['a.xml', 'b.xml'], 0, validJson)
+    expect(failed).toBe(true)
+    expect(results.map((r) => r.status)).toEqual(['error', 'error'])
+  })
+})
+
+describe('validateAll', () => {
+  const files = (n) => Array.from({ length: n }, (_, i) => `f${i}.xml`)
+  const passAll = (batch) => ({
+    exitCode: 0,
+    stdout: JSON.stringify({ results: batch.map((file) => ({ file, status: 'pass', valid: true, format: 'cii', errors: [], warnings: [] })) }),
+    stderr: '',
+  })
+
+  it('sends the files in runs of FILES_PER_RUN, in order', () => {
+    const runs = []
+    const results = validateAll(files(FILES_PER_RUN + 2), {}, (batch) => {
+      runs.push(batch.length)
+      return batch.length === 1 ? { exitCode: 0, stdout: validJson, stderr: '' } : passAll(batch)
+    })
+    expect(runs).toEqual([FILES_PER_RUN, 2])
+    expect(results).toHaveLength(FILES_PER_RUN + 2)
+    expect(results.every((r) => r.status === 'pass')).toBe(true)
+    expect(results.at(-1).file).toBe(`f${FILES_PER_RUN + 1}.xml`)
+  })
+
+  it('stops after a run that failed as a whole and marks the rest unchecked', () => {
+    let calls = 0
+    const results = validateAll(files(2 * FILES_PER_RUN + 1), {}, () => {
+      calls++
+      return { exitCode: 3, stdout: '', stderr: 'beliq: API error 429 (RATE_LIMITED): slow down' }
+    })
+    expect(calls).toBe(1)
+    expect(results).toHaveLength(2 * FILES_PER_RUN + 1)
+    expect(results.every((r) => r.status === 'error')).toBe(true)
+    expect(results.at(-1).message).toBe('not checked: API error: beliq: API error 429 (RATE_LIMITED): slow down')
+  })
+
+  it('keeps going after a run whose files merely errored one by one', () => {
+    let calls = 0
+    validateAll(files(FILES_PER_RUN + 2), {}, (batch) => {
+      calls++
+      const results = batch.map((file) => ({ file, status: 'error', message: 'API error 400 (PARSE_FAILED): nope' }))
+      return { exitCode: 3, stdout: JSON.stringify({ results }), stderr: '' }
+    })
+    expect(calls).toBe(2)
   })
 })
 
 describe('aggregate', () => {
   it('counts anything that is not a pass as invalid', () => {
     const results = [
-      classify('a', 0, validJson),
-      classify('b', 1, invalidJson),
-      classify('c', 3, ''),
+      one('a', 0, validJson),
+      one('b', 1, invalidJson),
+      one('c', 3, ''),
     ]
     expect(aggregate(results)).toEqual({ total: 3, invalid: 2 })
   })
   it('is all-clear when every file passes', () => {
-    expect(aggregate([classify('a', 0, validJson)])).toEqual({ total: 1, invalid: 0 })
+    expect(aggregate([one('a', 0, validJson)])).toEqual({ total: 1, invalid: 0 })
   })
 })
 
 describe('renderSummary', () => {
   it('headlines the failing count and marks the failing row', () => {
-    const md = renderSummary([classify('a', 0, validJson), classify('b', 1, invalidJson)])
+    const md = renderSummary([one('a', 0, validJson), one('b', 1, invalidJson)])
     expect(md).toContain('1 of 2 file(s) not compliant')
     expect(md).toContain('| ✅ | `a` |')
     expect(md).toContain('| ❌ | `b` |')
     expect(md).toContain('not compliant')
   })
   it('headlines all-compliant when nothing fails', () => {
-    expect(renderSummary([classify('a', 0, validJson)])).toContain('all 1 file(s) compliant')
+    expect(renderSummary([one('a', 0, validJson)])).toContain('all 1 file(s) compliant')
   })
   it('shows the reason for an errored file', () => {
-    expect(renderSummary([classify('a', 3, '')])).toContain('API error')
+    expect(renderSummary([one('a', 3, '')])).toContain('API error')
   })
 })
 
