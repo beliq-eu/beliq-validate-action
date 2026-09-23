@@ -8,9 +8,10 @@ inputs:
   files:
     description: >-
       Newline- or comma-separated glob(s) of e-invoice files to validate.
-      Matches under node_modules/, vendor/ and dist/ are skipped, since each
-      validated file is one call against your key. A glob that names one of
-      those directories outright is honoured.
+      The default matches XML only; use '**/*.{xml,pdf}' to include hybrid
+      ZUGFeRD/Factur-X PDFs. Matches under node_modules/, vendor/ and dist/
+      are skipped, since each validated file is one call against your key. A
+      glob that names one of those directories outright is honoured.
     required: false
     default: '**/*.xml'
   format:
