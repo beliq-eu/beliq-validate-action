@@ -134,6 +134,26 @@ function validateFile(file, { cliVersion, format, failOn, baseUrl }) {
   return { exitCode: res.status ?? 1, stdout: res.stdout ?? '', stderr: res.stderr ?? '' }
 }
 
+function issue(kind, message) {
+  process.stdout.write(`::${kind}::beliq-validate: ${message}\n`)
+}
+
+async function writeSummary(results) {
+  const md = renderSummary(results)
+  const path = process.env.GITHUB_STEP_SUMMARY
+  if (path) await appendFile(path, `${md}\n`)
+  else process.stdout.write(`${md}\n`)
+}
+
+async function setOutputs(results) {
+  const { total, invalid } = aggregate(results)
+  const path = process.env.GITHUB_OUTPUT
+  if (!path) return
+  const delim = 'beliq_results_EOF'
+  const block = `total=${total}\ninvalid=${invalid}\nresults<<${delim}\n${JSON.stringify(results)}\n${delim}\n`
+  await appendFile(path, block)
+}
+
 /**
  * What stops the step before any file is sent, as messages. An unknown
  * `fail-on` or `format` used to fall back to the default without a word, so
@@ -155,26 +175,6 @@ export function preflightProblems(env, platform = process.platform) {
     problems.push(`format must be one of: ${[...FORMATS].join(', ')} (got "${format}")`)
   }
   return problems
-}
-
-function issue(kind, message) {
-  process.stdout.write(`::${kind}::beliq-validate: ${message}\n`)
-}
-
-async function writeSummary(results) {
-  const md = renderSummary(results)
-  const path = process.env.GITHUB_STEP_SUMMARY
-  if (path) await appendFile(path, `${md}\n`)
-  else process.stdout.write(`${md}\n`)
-}
-
-async function setOutputs(results) {
-  const { total, invalid } = aggregate(results)
-  const path = process.env.GITHUB_OUTPUT
-  if (!path) return
-  const delim = 'beliq_results_EOF'
-  const block = `total=${total}\ninvalid=${invalid}\nresults<<${delim}\n${JSON.stringify(results)}\n${delim}\n`
-  await appendFile(path, block)
 }
 
 export async function main() {
