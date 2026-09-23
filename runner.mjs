@@ -222,6 +222,29 @@ async function setOutputs(results) {
   await appendFile(path, block)
 }
 
+/**
+ * What stops the step before any file is sent, as messages. An unknown
+ * `fail-on` or `format` used to fall back to the default without a word, so
+ * `fail-on: warnings` (for `warning`) passed a job on the warnings it asked to
+ * fail on. Windows is refused by name: the runner spawns `npx`, which is
+ * `npx.cmd` there, and that path has never been built or tested.
+ */
+export function preflightProblems(env, platform = process.platform) {
+  const problems = []
+  if (platform === 'win32') {
+    problems.push('Windows runners are not supported; run this step on a Linux or macOS runner')
+  }
+  const failOn = (env.INPUT_FAIL_ON || 'error').trim()
+  if (!FAIL_ON.has(failOn)) {
+    problems.push(`fail-on must be one of: ${[...FAIL_ON].join(', ')} (got "${failOn}")`)
+  }
+  const format = (env.INPUT_FORMAT || 'auto').trim()
+  if (!FORMATS.has(format)) {
+    problems.push(`format must be one of: ${[...FORMATS].join(', ')} (got "${format}")`)
+  }
+  return problems
+}
+
 export async function main() {
   if (!process.env.BELIQ_API_KEY) {
     issue('error', 'no beliq API key provided (set the `api-key` input from a repository secret)')
@@ -229,11 +252,16 @@ export async function main() {
     return
   }
 
+  const problems = preflightProblems(process.env)
+  if (problems.length > 0) {
+    for (const problem of problems) issue('error', problem)
+    process.exitCode = 1
+    return
+  }
+
   const globs = parseGlobs(process.env.INPUT_FILES || DEFAULT_FILES)
-  const failOnRaw = (process.env.INPUT_FAIL_ON || 'error').trim()
-  const failOn = FAIL_ON.has(failOnRaw) ? failOnRaw : 'error'
-  const formatRaw = (process.env.INPUT_FORMAT || 'auto').trim()
-  const format = FORMATS.has(formatRaw) ? formatRaw : 'auto'
+  const failOn = (process.env.INPUT_FAIL_ON || 'error').trim()
+  const format = (process.env.INPUT_FORMAT || 'auto').trim()
   const cliVersion = (process.env.INPUT_CLI_VERSION || DEFAULT_CLI_VERSION).trim() || DEFAULT_CLI_VERSION
   const baseUrl = (process.env.INPUT_BASE_URL || '').trim()
 
