@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- A minimal CII (UN/CEFACT Cross Industry Invoice) carrying the XRechnung
      guideline id but missing the Buyer reference (BT-10), which XRechnung
-     requires (rule BR-DE-15). Used as a known-invalid example for the gated
-     live test and for the skill walkthrough. -->
+     requires (rule BR-DE-15). Used as the known-invalid example in the gated
+     live test. -->
 <rsm:CrossIndustryInvoice
     xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
     xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"

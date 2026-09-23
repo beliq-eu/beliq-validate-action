@@ -11,7 +11,7 @@
     "url": "git+https://github.com/beliq-eu/beliq-validate-action.git"
   },
   "engines": {
-    "node": ">=20.15"
+    "node": ">=22"
   },
   "scripts": {
     "lint": "eslint runner.mjs test",

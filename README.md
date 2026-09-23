@@ -32,11 +32,25 @@ jobs:
 
 Get an API key from your beliq dashboard (the free tier is enough to evaluate) and store it as the `BELIQ_API_KEY` repository secret.
 
+The default `files` glob matches XML only. To check hybrid ZUGFeRD/Factur-X PDFs as well (the CLI validates the XML embedded in them), widen it:
+
+```yaml
+- uses: beliq-eu/beliq-validate-action@v1
+  with:
+    files: 'invoices/**/*.{xml,pdf}'
+    api-key: ${{ secrets.BELIQ_API_KEY }}
+```
+
+## Requirements
+
+- **Linux or macOS runners.** Windows runners are not supported.
+- **Node.js 22, set up by the action.** It runs `actions/setup-node` with Node 22, and that Node stays first on the `PATH` for the rest of the job. If a later step needs a different version, run `actions/setup-node` again after this action.
+
 ## Inputs
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `files` | no | `**/*.xml` | Newline- or comma-separated glob(s) of e-invoice files to validate. |
+| `files` | no | `**/*.xml` | Newline- or comma-separated glob(s) of e-invoice files to validate. XML only by default; use `**/*.{xml,pdf}` to include hybrid ZUGFeRD/Factur-X PDFs. |
 | `format` | no | `auto` | Force the input syntax: `auto`, `cii`, or `ubl`. |
 | `fail-on` | no | `error` | Severity threshold that fails the job: `error` or `warning`. |
 | `api-key` | yes | | Your beliq API key. Pass it from a repository secret. |
