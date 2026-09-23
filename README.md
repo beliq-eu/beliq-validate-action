@@ -43,6 +43,8 @@ Get an API key from your beliq dashboard (the free tier is enough to evaluate) a
 | `base-url` | no | | Override the beliq API base URL (self-hosted deployments only). |
 | `cli-version` | no | `0.2.2` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
 
+A `format` or `fail-on` value outside the listed ones fails the step before any file is sent.
+
 ## Outputs
 
 | Output | Description |
