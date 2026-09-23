@@ -6,14 +6,19 @@ import process from 'node:process'
 
 // The action's job: run the published beliq CLI over every matched e-invoice,
 // summarize the verdicts, and fail the workflow if any file is not compliant.
-// The CLI validates one file and returns the CI exit code; this runner owns the
-// glob, the aggregation, the step summary, and the outputs.
+// The CLI validates the files in batch mode and reports a verdict per file;
+// this runner owns the glob, the aggregation, the step summary, and the outputs.
 
 const FAIL_ON = new Set(['error', 'warning'])
 const FORMATS = new Set(['auto', 'cii', 'ubl'])
 // spawn stdout cap: a validation result JSON is small, but a pathological
 // document could produce a long error list. 16 MiB is well clear of that.
 const MAX_BUFFER = 16 * 1024 * 1024
+
+// Files per CLI run. One run validates its files in sequence and stops on a
+// refused key, a forbidden request or a rate limit instead of trying the rest;
+// the cap only keeps the argument list far below the OS limit on a large tree.
+export const FILES_PER_RUN = 100
 
 // The default glob is `**/*.xml`, which in a consumer's checkout also matches
 // every XML file vendored under these directories: fixtures inside an installed
@@ -47,31 +52,72 @@ function firstLine(text) {
   return String(text ?? '').split('\n').find((l) => l.trim()) ?? ''
 }
 
-// Map a CLI (exitCode, stdout) pair to a normalized per-file result.
 // The CLI contract: 0 valid, 1 invalid (per --fail-on), 2 usage, 3 API, 4 I/O.
-export function classify(file, exitCode, stdout) {
-  if (exitCode === 0 || exitCode === 1) {
-    let parsed
-    try {
-      parsed = JSON.parse(stdout)
-    } catch {
-      parsed = null
-    }
-    return {
-      file,
-      status: exitCode === 0 ? 'pass' : 'fail',
-      format: parsed?.format ?? '',
-      errors: parsed?.errors?.length ?? 0,
-      warnings: parsed?.warnings?.length ?? 0,
-      message: '',
-    }
+function reasonFor(exitCode) {
+  return exitCode === 2 ? 'usage error'
+    : exitCode === 3 ? 'API error'
+      : exitCode === 4 ? 'I/O error'
+        : `exit ${exitCode}`
+}
+
+function counted(file, status, result, message = '') {
+  return {
+    file,
+    status,
+    format: result?.format ?? '',
+    errors: result?.errors?.length ?? 0,
+    warnings: result?.warnings?.length ?? 0,
+    message,
   }
-  const reason =
-    exitCode === 2 ? 'usage error'
-      : exitCode === 3 ? 'API error'
-        : exitCode === 4 ? 'I/O error'
-          : `exit ${exitCode}`
-  return { file, status: 'error', format: '', errors: 0, warnings: 0, message: reason }
+}
+
+function errored(file, message) {
+  return { file, status: 'error', format: '', errors: 0, warnings: 0, message }
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Map one CLI run over `files` to one normalized result per file.
+ *
+ * Several files come back as the CLI's batch report, one row per file. One
+ * file comes back as a bare validation result, because that is what the CLI
+ * prints for a single named file. Anything else means the run as a whole
+ * failed (a refused key, an unreachable API, npx itself), and every file in it
+ * gets that reason. `failed` says so, so the caller can stop instead of
+ * repeating the same failure for the next run.
+ *
+ * Exit 0 or 1 without a verdict is an error, not a failed document: beliq-cli
+ * 0.2.2 and earlier exit 1 when the API cannot be reached.
+ */
+export function classifyRun(files, exitCode, stdout, stderr = '') {
+  const parsed = parseJson(stdout)
+
+  if ([0, 1, 3].includes(exitCode) && Array.isArray(parsed?.results)) {
+    const rows = new Map(parsed.results.map((row) => [row.file, row]))
+    const results = files.map((file) => {
+      const row = rows.get(file)
+      if (!row) return errored(file, 'the CLI reported no result for this file')
+      if (row.status === 'pass' || row.status === 'fail') return counted(file, row.status, row)
+      return errored(file, row.message ?? 'not checked')
+    })
+    return { results, failed: false }
+  }
+
+  if (files.length === 1 && (exitCode === 0 || exitCode === 1) && typeof parsed?.valid === 'boolean') {
+    return { results: [counted(files[0], exitCode === 0 ? 'pass' : 'fail', parsed)], failed: false }
+  }
+
+  const detail = firstLine(stderr)
+  const reason = exitCode === 0 || exitCode === 1 ? `no verdict (exit ${exitCode})` : reasonFor(exitCode)
+  const message = detail ? `${reason}: ${detail}` : reason
+  return { results: files.map((file) => errored(file, message)), failed: true }
 }
 
 export function aggregate(results) {
@@ -124,14 +170,36 @@ export async function expandFiles(globs) {
   return [...seen].sort()
 }
 
-function validateFile(file, { cliVersion, format, failOn, baseUrl }) {
-  const argv = ['-y', `beliq-cli@${cliVersion}`, 'validate', file, '--json', '--fail-on', failOn]
+function runCli(files, { cliVersion, format, failOn, baseUrl }) {
+  const argv = ['-y', `beliq-cli@${cliVersion}`, 'validate', ...files, '--json', '--fail-on', failOn]
   if (format && format !== 'auto') argv.push('--format', format)
   const env = { ...process.env }
   if (baseUrl) env.BELIQ_BASE_URL = baseUrl
   const res = spawnSync('npx', argv, { encoding: 'utf8', env, maxBuffer: MAX_BUFFER })
   if (res.error) return { exitCode: 4, stdout: '', stderr: String(res.error.message) }
   return { exitCode: res.status ?? 1, stdout: res.stdout ?? '', stderr: res.stderr ?? '' }
+}
+
+/**
+ * Validate `files` in runs of FILES_PER_RUN. After a run that failed as a
+ * whole, the remaining files are marked with its reason and not sent: the
+ * same key, quota and network would fail them the same way.
+ */
+export function validateAll(files, opts, run = runCli, onRun = () => {}) {
+  const results = []
+  for (let i = 0; i < files.length; i += FILES_PER_RUN) {
+    const batch = files.slice(i, i + FILES_PER_RUN)
+    const { exitCode, stdout, stderr } = run(batch, opts)
+    const { results: batchResults, failed } = classifyRun(batch, exitCode, stdout, stderr)
+    results.push(...batchResults)
+    onRun(batchResults)
+    if (failed) {
+      const reason = `not checked: ${batchResults[0].message}`
+      for (const file of files.slice(i + FILES_PER_RUN)) results.push(errored(file, reason))
+      break
+    }
+  }
+  return results
 }
 
 function issue(kind, message) {
@@ -177,14 +245,9 @@ export async function main() {
     return
   }
 
-  const results = []
-  for (const file of files) {
-    const { exitCode, stdout, stderr } = validateFile(file, { cliVersion, format, failOn, baseUrl })
-    const r = classify(file, exitCode, stdout)
-    if (r.status === 'error' && stderr) r.message = `${r.message}: ${firstLine(stderr)}`
-    results.push(r)
-    process.stdout.write(`${r.status === 'pass' ? 'PASS' : 'FAIL'} ${file}\n`)
-  }
+  const results = validateAll(files, { cliVersion, format, failOn, baseUrl }, runCli, (batch) => {
+    for (const r of batch) process.stdout.write(`${r.status === 'pass' ? 'PASS' : 'FAIL'} ${r.file}\n`)
+  })
 
   await writeSummary(results)
   await setOutputs(results)

@@ -56,6 +56,7 @@ Get an API key from your beliq dashboard (the free tier is enough to evaluate) a
 - The job **fails** (exit 1) if any file is not compliant at the chosen `fail-on` threshold, or if a file could not be validated (a bad key, quota, or unreadable file counts as a failure, not a silent pass).
 - If no file matches `files`, the run logs a warning and passes: an empty match is not a compliance failure.
 - Each run appends a Markdown table to the job's step summary: one row per file with its format, error/warning counts, and verdict.
+- Files go to `beliq-cli` in batches of up to 100 per process. A refused key, a forbidden request or a rate limit stops the run: the files not yet sent are reported as not checked, rather than each spending another call on the same answer.
 
 ## Versioning
 
