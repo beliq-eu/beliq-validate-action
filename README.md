@@ -41,7 +41,7 @@ Get an API key from your beliq dashboard (the free tier is enough to evaluate) a
 | `fail-on` | no | `error` | Severity threshold that fails the job: `error` or `warning`. |
 | `api-key` | yes | | Your beliq API key. Pass it from a repository secret. |
 | `base-url` | no | | Override the beliq API base URL (self-hosted deployments only). |
-| `cli-version` | no | `0.2.2` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
+| `cli-version` | no | `0.3.0` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
 
 ## Outputs
 

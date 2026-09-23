@@ -36,7 +36,7 @@ inputs:
       follow the CLI instead.
     required: false
     # renovate: datasource=npm depName=beliq-cli
-    default: '0.2.2'
+    default: '0.3.0'
 outputs:
   total:
     description: 'Number of files validated.'
