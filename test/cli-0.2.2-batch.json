@@ -1,0 +1,49 @@
+{
+  "total": 4,
+  "passed": 2,
+  "failed": 1,
+  "errored": 1,
+  "results": [
+    {
+      "file": "inv/a.xml",
+      "status": "pass",
+      "valid": true,
+      "format": "cii",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "file": "inv/b.xml",
+      "status": "fail",
+      "valid": false,
+      "format": "cii",
+      "errors": [
+        {
+          "ruleId": "BR-DE-15",
+          "severity": "error",
+          "message": "Buyer reference is required"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "file": "inv/c.xml",
+      "status": "error",
+      "message": "API error 400 (PARSE_FAILED): Not an XML document"
+    },
+    {
+      "file": "inv/d.xml",
+      "status": "pass",
+      "valid": true,
+      "format": "ubl",
+      "errors": [],
+      "warnings": [
+        {
+          "ruleId": "BR-CL-01",
+          "severity": "warning",
+          "message": "odd"
+        }
+      ]
+    }
+  ]
+}

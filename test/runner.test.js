@@ -31,7 +31,7 @@ const invalidJson = JSON.stringify({
 
 // Printed by `npx beliq-cli@0.2.2 validate inv/a.xml inv/b.xml inv/c.xml
 // inv/d.xml --json` against a local stub API (exit 3, because c.xml errored).
-const batchReport = readFileSync(new URL('./fixtures/cli-0.2.2-batch.json', import.meta.url), 'utf8')
+const batchReport = readFileSync(new URL('./cli-0.2.2-batch.json', import.meta.url), 'utf8')
 const batchFiles = ['inv/a.xml', 'inv/b.xml', 'inv/c.xml', 'inv/d.xml']
 
 /** One file through classifyRun, for the tests that only need a row. */
