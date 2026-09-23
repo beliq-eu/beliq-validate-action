@@ -39,7 +39,7 @@ export const DEFAULT_FILES = '**/*.xml'
 // .github/workflows/test-action.yml; a test binds all three, and the marker
 // comment above each one is what lets Renovate move them together.
 // renovate: datasource=npm depName=beliq-cli
-export const DEFAULT_CLI_VERSION = '0.2.2'
+export const DEFAULT_CLI_VERSION = '0.3.0'
 
 export function parseGlobs(input) {
   return String(input ?? '')

@@ -55,7 +55,7 @@ The default `files` glob matches XML only. To check hybrid ZUGFeRD/Factur-X PDFs
 | `fail-on` | no | `error` | Severity threshold that fails the job: `error` or `warning`. |
 | `api-key` | yes | | Your beliq API key. Pass it from a repository secret. |
 | `base-url` | no | | Override the beliq API base URL (self-hosted deployments only). |
-| `cli-version` | no | `0.2.2` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
+| `cli-version` | no | `0.3.0` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
 
 A `format` or `fail-on` value outside the listed ones fails the step before any file is sent.
 
