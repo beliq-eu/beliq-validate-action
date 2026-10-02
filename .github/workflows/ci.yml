@@ -23,3 +23,6 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: ./scripts/check-action-pins.sh
+
+  public-scrub:
+    uses: beliq-eu/.github/.github/workflows/public-scrub.yml@c53d223c088d5e4a61c79cc5e85a0e3ea0f93094 # main
