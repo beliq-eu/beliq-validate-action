@@ -39,7 +39,7 @@ if [ "$checked" -eq 0 ]; then
 fi
 
 if [ "$bad" -ne 0 ]; then
-  echo "pin each ref above to a 40-character commit SHA (keep the # vN comment)."
+  echo "pin each ref above to a 40-character commit SHA, and keep the full version tag as a trailing comment, such as # v7.0.1."
   exit 1
 fi
 echo "$checked uses: refs, all pinned to a commit SHA"
