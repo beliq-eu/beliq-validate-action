@@ -14,6 +14,9 @@ import {
   skippedDirsFor,
   DEFAULT_FILES,
   DEFAULT_CLI_VERSION,
+  VERIFICATION_DOC,
+  verdictText,
+  logLine,
 } from '../runner.mjs'
 
 // Pure-logic tests: no network, no CLI. The runner's I/O (spawning the CLI,
@@ -33,6 +36,29 @@ const invalidJson = JSON.stringify({
 // inv/d.xml --json` against a local stub API (exit 3, because c.xml errored).
 const batchReport = readFileSync(new URL('./cli-0.2.2-batch.json', import.meta.url), 'utf8')
 const batchFiles = ['inv/a.xml', 'inv/b.xml', 'inv/c.xml', 'inv/d.xml']
+
+// Printed by `npx beliq-cli@0.4.0 validate <the four files> --json` against the
+// live API with a sandbox key on 2026-10-13 (exit 0).
+const liveBatch = readFileSync(new URL('./cli-0.4.0-batch.json', import.meta.url), 'utf8')
+const liveFiles = JSON.parse(liveBatch).results.map((row) => row.file)
+
+// The live API's answer to one validate of a French Factur-X document on the
+// `previous` ruleset channel, 2026-10-11: `valid` is true and the result
+// carries France CTC blocking rule ids. beliq-cli prints a single file's result
+// unchanged with --json, and it cannot send the channel header itself.
+const franceResult = readFileSync(new URL('./api-validate-france-previous.json', import.meta.url), 'utf8')
+
+/** The fields a row gains from a verdict, all empty, for rows that carry none. */
+const noVerdict = {
+  valid: null,
+  verificationTier: null,
+  verificationBadge: null,
+  verificationBadgeLabel: null,
+  franceCtcBlockingRuleIds: [],
+  pdfInput: null,
+}
+/** The same fields for a 0.2.2 row, which predates the badge. */
+const unbadged = (valid) => ({ ...noVerdict, valid })
 
 /** One file through classifyRun, for the tests that only need a row. */
 const one = (file, exitCode, stdout, stderr) => classifyRun([file], exitCode, stdout, stderr).results[0]
@@ -82,10 +108,10 @@ describe('classifyRun, a batch', () => {
     const { results, failed } = classifyRun(batchFiles, 3, batchReport)
     expect(failed).toBe(false)
     expect(results).toEqual([
-      { file: 'inv/a.xml', status: 'pass', format: 'cii', errors: 0, warnings: 0, message: '' },
-      { file: 'inv/b.xml', status: 'fail', format: 'cii', errors: 1, warnings: 0, message: '' },
-      { file: 'inv/c.xml', status: 'error', format: '', errors: 0, warnings: 0, message: 'API error 400 (PARSE_FAILED): Not an XML document' },
-      { file: 'inv/d.xml', status: 'pass', format: 'ubl', errors: 0, warnings: 1, message: '' },
+      { file: 'inv/a.xml', status: 'pass', format: 'cii', errors: 0, warnings: 0, message: '', ...unbadged(true) },
+      { file: 'inv/b.xml', status: 'fail', format: 'cii', errors: 1, warnings: 0, message: '', ...unbadged(false) },
+      { file: 'inv/c.xml', status: 'error', format: '', errors: 0, warnings: 0, message: 'API error 400 (PARSE_FAILED): Not an XML document', ...noVerdict },
+      { file: 'inv/d.xml', status: 'pass', format: 'ubl', errors: 0, warnings: 1, message: '', ...unbadged(true) },
     ])
   })
   it('marks a requested file the report does not mention as an error', () => {
@@ -103,6 +129,85 @@ describe('classifyRun, a batch', () => {
     const { results, failed } = classifyRun(['a.xml', 'b.xml'], 0, validJson)
     expect(failed).toBe(true)
     expect(results.map((r) => r.status)).toEqual(['error', 'error'])
+  })
+})
+
+describe('classifyRun over a live beliq-cli 0.4.0 batch', () => {
+  // Every key of the CLI's rows, and what the action does with it. A key that
+  // a re-recorded fixture adds fails the last test here until it is named, so
+  // a new verdict field is a decision and not a silent drop.
+  const ROW_KEYS = {
+    file: 'output and summary',
+    status: 'output and summary',
+    valid: 'output and summary',
+    format: 'output and summary',
+    errors: 'output and summary, as a count',
+    warnings: 'output and summary, as a count',
+    verificationTier: 'output',
+    verificationBadge: 'output',
+    verificationBadgeLabel: 'output and summary, as the check depth',
+    franceCtcBlockingRuleIds: 'output, and fails the file',
+    pdfInput: 'output and summary',
+    profileDetected: 'dropped: the format column names the syntax; the CLI prints the profile',
+    ciusVersion: 'dropped: a ruleset detail, in the CLI output',
+    schematronVersion: 'dropped: a ruleset detail, in the CLI output',
+    rulesetArtifacts: 'dropped: a ruleset detail, in the CLI output',
+    rulesetSha256: 'dropped: a ruleset detail, in the CLI output',
+    sha256: 'dropped: the hash of a file the caller already holds',
+    driftCheckedAt: 'dropped: a ruleset detail, in the CLI output',
+    italyFatturapaRuntimeVersion: 'dropped: a ruleset detail, in the CLI output',
+    italyFatturapaXsdBundle: 'dropped: a ruleset detail, in the CLI output',
+  }
+
+  it('carries the badge label of each verdict, and null where the API sent none', () => {
+    const { results, failed } = classifyRun(liveFiles, 0, liveBatch)
+    expect(failed).toBe(false)
+    expect(results.map((r) => [r.file, r.status, r.valid, r.verificationBadgeLabel])).toEqual([
+      ['authority-xrechnung-ubl.xml', 'pass', true, 'Authority-checked'],
+      ['schema-fatturapa-fpr12.xml', 'pass', true, 'Schema-checked'],
+      ['nobadge-fatturapa-fpa12.xml', 'pass', true, null],
+      ['pdf-zugferd-2p1-en16931-einfach.pdf', 'pass', true, 'Authority-checked'],
+    ])
+    expect(results[0]).toMatchObject({ verificationTier: 'conformance-verified', verificationBadge: 'authority-verified' })
+    expect(results[1]).toMatchObject({ verificationTier: 'xsd-structural', verificationBadge: 'structure-checked' })
+    expect(results[3].pdfInput).toMatchObject({ attachmentName: 'factur-x.xml' })
+  })
+
+  it('names every key the CLI puts on a row', () => {
+    for (const row of JSON.parse(liveBatch).results) {
+      for (const key of Object.keys(row)) {
+        expect(ROW_KEYS, `${row.file}: the CLI row key "${key}" is not named in ROW_KEYS`).toHaveProperty(key)
+      }
+    }
+  })
+})
+
+describe('a France CTC block fails the file', () => {
+  const france = JSON.parse(franceResult)
+
+  it('the fixture is the case the rule exists for: valid, with blocking rule ids', () => {
+    expect(france.valid).toBe(true)
+    expect(france.franceCtcBlockingRuleIds.length).toBeGreaterThan(0)
+  })
+
+  it('in a one-file run that an older CLI passed with exit 0', () => {
+    const r = one('fr.xml', 0, franceResult)
+    expect(r).toMatchObject({ status: 'fail', valid: true, franceCtcBlockingRuleIds: france.franceCtcBlockingRuleIds })
+    expect(r.message).toMatch(/^A plateforme agréée refuses/)
+  })
+
+  it('in a batch row that an older CLI marked as a pass', () => {
+    const report = JSON.stringify({ results: [{ file: 'fr.xml', status: 'pass', ...france }] })
+    expect(classifyRun(['fr.xml'], 0, report).results[0]).toMatchObject({ status: 'fail', valid: true })
+  })
+
+  it('names the ids itself when the API sent no message that names them all', () => {
+    const bare = JSON.stringify({ valid: true, format: 'cii', errors: [], warnings: [], franceCtcBlockingRuleIds: ['BR-FR-10_BT-30'] })
+    expect(one('fr.xml', 0, bare).message).toBe('France CTC blocking rule ids: BR-FR-10_BT-30')
+  })
+
+  it('leaves a result without ids as the CLI judged it', () => {
+    expect(one('a.xml', 0, validJson)).toMatchObject({ status: 'pass', message: '', franceCtcBlockingRuleIds: [] })
   })
 })
 
@@ -164,18 +269,72 @@ describe('aggregate', () => {
 })
 
 describe('renderSummary', () => {
+  const live = classifyRun(liveFiles, 0, liveBatch).results
+
   it('headlines the failing count and marks the failing row', () => {
     const md = renderSummary([one('a', 0, validJson), one('b', 1, invalidJson)])
-    expect(md).toContain('1 of 2 file(s) not compliant')
+    expect(md).toContain('## beliq validate: 1 of 2 file(s) failed')
     expect(md).toContain('| ✅ | `a` |')
-    expect(md).toContain('| ❌ | `b` |')
-    expect(md).toContain('not compliant')
+    expect(md).toContain('| ❌ | `b` | ubl | - | 1 | 1 | invalid |')
   })
-  it('headlines all-compliant when nothing fails', () => {
-    expect(renderSummary([one('a', 0, validJson)])).toContain('all 1 file(s) compliant')
+  it('headlines all-passed when nothing fails', () => {
+    expect(renderSummary([one('a', 0, validJson)])).toContain('## beliq validate: all 1 file(s) passed')
   })
   it('shows the reason for an errored file', () => {
     expect(renderSummary([one('a', 3, '')])).toContain('API error')
+  })
+  it('gives each live verdict its check depth, and - where the API stated none', () => {
+    const md = renderSummary(live)
+    expect(md).toContain('| | File | Format | Check depth | Errors | Warnings | Verdict |')
+    expect(md).toContain('| ✅ | `authority-xrechnung-ubl.xml` | ubl | Authority-checked | 0 | 1 | valid |')
+    expect(md).toContain('| ✅ | `schema-fatturapa-fpr12.xml` | fatturapa | Schema-checked | 0 | 0 | valid |')
+    expect(md).toContain('| ✅ | `nobadge-fatturapa-fpa12.xml` | fatturapa | - | 0 | 0 | valid |')
+    expect(md).toContain(VERIFICATION_DOC)
+  })
+  it('says that a PDF verdict is about the embedded XML', () => {
+    expect(renderSummary(live)).toContain(
+      '| ✅ | `pdf-zugferd-2p1-en16931-einfach.pdf` | cii | Authority-checked | 0 | 0 | valid. The verdict is about the embedded XML; the PDF itself was not checked. |',
+    )
+  })
+  it('never calls a verdict compliant', () => {
+    const france = one('fr.xml', 0, franceResult)
+    for (const results of [live, [france], [one('b', 1, invalidJson)], []]) {
+      expect(renderSummary(results)).not.toMatch(/compliant/i)
+    }
+  })
+  it('prints the France block in the API\'s words on one table line', () => {
+    const md = renderSummary([one('fr.xml', 0, franceResult)])
+    const row = md.split('\n').find((line) => line.includes('`fr.xml`'))
+    expect(row).toMatch(/^\| ❌ \| `fr\.xml` \| cii \| Authority-checked \| 0 \| 10 \| valid\. A plateforme agréée refuses/)
+  })
+  it('keeps API text from breaking the table', () => {
+    const row = one('x.xml', 3, '', 'beliq: API error 400: a | b\nc')
+    expect(renderSummary([row])).toContain('a \\| b')
+  })
+  it('says no file matched for an empty match', () => {
+    expect(renderSummary([])).toBe('## beliq validate: no file matched\n')
+  })
+})
+
+describe('verdictText', () => {
+  it('names the fail-on threshold for a valid file that failed without a France block', () => {
+    const report = JSON.stringify({ results: [{ file: 'w.xml', status: 'fail', valid: true, format: 'ubl', errors: [], warnings: [{}] }] })
+    expect(verdictText(classifyRun(['w.xml'], 1, report).results[0])).toBe('valid. Fails the `fail-on` threshold.')
+  })
+})
+
+describe('logLine', () => {
+  const live = classifyRun(liveFiles, 0, liveBatch).results
+  it('gives each file its verdict and check depth', () => {
+    expect(live.map(logLine)).toEqual([
+      'PASS authority-xrechnung-ubl.xml (Authority-checked)',
+      'PASS schema-fatturapa-fpr12.xml (Schema-checked)',
+      'PASS nobadge-fatturapa-fpa12.xml (check depth not stated)',
+      'PASS pdf-zugferd-2p1-en16931-einfach.pdf (Authority-checked)',
+    ])
+  })
+  it('gives an errored file its reason', () => {
+    expect(logLine(one('c.xml', 2, ''))).toBe('FAIL c.xml: usage error')
   })
 })
 
@@ -252,17 +411,18 @@ describe('the files default is written in two files', () => {
   })
 })
 
-describe('the beliq-cli version is written in three files', () => {
+describe('the beliq-cli version is written in four files', () => {
   const repo = new URL('../', import.meta.url)
   const read = (rel) => readFile(new URL(rel, repo), 'utf8')
 
-  // Where the pin lives, and how each file spells it. Adding a fourth site
+  // Where the pin lives, and how each file spells it. Adding a fifth site
   // means adding it here and to renovate.json's managerFilePatterns; the last
-  // test in this block fails if the two lists disagree.
+  // test of the next block fails if the two lists disagree.
   const sites = [
     { path: 'action.yml', spelling: (v) => `default: '${v}'` },
     { path: 'runner.mjs', spelling: (v) => `DEFAULT_CLI_VERSION = '${v}'` },
     { path: '.github/workflows/test-action.yml', spelling: (v) => `beliq-cli@${v}` },
+    { path: 'README.md', spelling: (v) => `depName=beliq-cli --> \`${v}\`` },
   ]
 
   it.each(sites)('$path pins the version runner.mjs exports', async ({ path, spelling }) => {
@@ -278,7 +438,7 @@ describe('the beliq-cli version is written in three files', () => {
   })
 })
 
-describe('the Renovate custom manager reads all three pins', () => {
+describe('the Renovate custom manager reads all four pins', () => {
   const repo = new URL('../', import.meta.url)
   const read = (rel) => readFile(new URL(rel, repo), 'utf8')
 

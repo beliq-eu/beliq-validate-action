@@ -1,0 +1,132 @@
+{
+  "total": 4,
+  "passed": 4,
+  "failed": 0,
+  "errored": 0,
+  "results": [
+    {
+      "file": "authority-xrechnung-ubl.xml",
+      "status": "pass",
+      "valid": true,
+      "format": "ubl",
+      "errors": [],
+      "warnings": [
+        {
+          "ruleId": "BR-DE-TMP-32",
+          "severity": "info",
+          "message": "[BR-DE-TMP-32] Eine Rechnung sollte zur Angabe des Liefer-/Leistungsdatums entweder BT-72 \"Actual delivery date\", BG-14 \"Invoicing period\" oder in jeder Rechnungsposition BG-26 \"Invoice line period\" enthalten.",
+          "location": "/Q{urn:oasis:names:specification:ubl:schema:xsd:Invoice-2}Invoice[1]"
+        }
+      ],
+      "sha256": "0efafa05c74d06ff25bbc2b70bcb2e9f14b97d22a4b33c5e92838bf2cc8986cb",
+      "rulesetSha256": "909a19e0e2f276b46ee2494fd841f4b5b091d03fceb444c6fe5e3db3760fc5b8",
+      "rulesetArtifacts": [
+        {
+          "key": "en16931_ubl_schematron",
+          "version": "1.3.16",
+          "fileSha256": "39f9d282867f1a49e7708d9e29a53da89643e1ee56f10cec1ebcf1277595fcbd"
+        },
+        {
+          "key": "ubl_xsd",
+          "version": "2.1",
+          "fileSha256": "40fae8cb436f3a9506d7acce65ba162caef3b0bed4d5cbc0992b2153ded4edf4"
+        },
+        {
+          "key": "xrechnung_schematron",
+          "version": "XRechnung-2.6.0",
+          "fileSha256": "aa7d495e02990d88a9dc91b5eceb3349f7ee5565241d93ef99e90e1760fdd70f"
+        },
+        {
+          "key": "xrechnung_severity_overrides",
+          "version": "2026-08-31",
+          "fileSha256": "3db6bcddfd30cc9d51ac7c6c156ae2621c27d471a65f9db98db5c3b081ab6713"
+        }
+      ],
+      "driftCheckedAt": "2026-10-13T04:21:23Z",
+      "profileDetected": "xrechnung",
+      "verificationTier": "conformance-verified",
+      "verificationBadge": "authority-verified",
+      "verificationBadgeLabel": "Authority-checked",
+      "schematronVersion": "1.3.16",
+      "ciusVersion": "XRechnung-2.6.0"
+    },
+    {
+      "file": "schema-fatturapa-fpr12.xml",
+      "status": "pass",
+      "valid": true,
+      "format": "fatturapa",
+      "errors": [],
+      "warnings": [],
+      "sha256": "73e61f2f71ca83937fdc2b64dfa71e45f025087b44ad73d835d8c080dc70b286",
+      "rulesetSha256": "e682e2c04d0e302f9349f959e0fa36bdaccd5fc0183049298c0a4fbfe528bf60",
+      "rulesetArtifacts": [
+        {
+          "key": "italy_fatturapa",
+          "version": "1.4-runtime-2026-05-01",
+          "fileSha256": "e8fd1160860ed4ca5acebc773c624892771ebaf3ed604faa1a4c7631874fc00f"
+        }
+      ],
+      "driftCheckedAt": "2026-10-13T04:21:23Z",
+      "profileDetected": "italy-fatturapa-ordinaria-fpr12",
+      "verificationTier": "xsd-structural",
+      "verificationBadge": "structure-checked",
+      "verificationBadgeLabel": "Schema-checked",
+      "italyFatturapaXsdBundle": "FatturaPA XSD (v1.4 export path); ordinaria+PA 1.2.3; semplificata 1.0.2",
+      "italyFatturapaRuntimeVersion": "1.4-runtime-2026-05-01"
+    },
+    {
+      "file": "nobadge-fatturapa-fpa12.xml",
+      "status": "pass",
+      "valid": true,
+      "format": "fatturapa",
+      "errors": [],
+      "warnings": [],
+      "sha256": "e26b32f39ac87824d3255f3a9d2b5f06de6cd52dfba705ad057227a5a6d8c30b",
+      "rulesetSha256": "e682e2c04d0e302f9349f959e0fa36bdaccd5fc0183049298c0a4fbfe528bf60",
+      "rulesetArtifacts": [
+        {
+          "key": "italy_fatturapa",
+          "version": "1.4-runtime-2026-05-01",
+          "fileSha256": "e8fd1160860ed4ca5acebc773c624892771ebaf3ed604faa1a4c7631874fc00f"
+        }
+      ],
+      "driftCheckedAt": "2026-10-13T04:21:23Z",
+      "profileDetected": "italy-fatturapa-pa-fpa12",
+      "italyFatturapaXsdBundle": "FatturaPA XSD (v1.4 export path); ordinaria+PA 1.2.3; semplificata 1.0.2",
+      "italyFatturapaRuntimeVersion": "1.4-runtime-2026-05-01"
+    },
+    {
+      "file": "pdf-zugferd-2p1-en16931-einfach.pdf",
+      "status": "pass",
+      "valid": true,
+      "format": "cii",
+      "errors": [],
+      "warnings": [],
+      "sha256": "87e20637c9bf0ce3b38dcd0500eaeadc5cd3d6812c8f4f37ea2ad4a6ea14e1f7",
+      "rulesetSha256": "fe2595e370a7e13591c609ad3c244cecb48329dfe170091488351bb8b860ba49",
+      "rulesetArtifacts": [
+        {
+          "key": "cii_xsd",
+          "version": "D16B",
+          "fileSha256": "b9798aafcba039d0630f0015ffae5092a1758bf924d19d97b6bf0bf9d95f22a0"
+        },
+        {
+          "key": "en16931_cii_schematron",
+          "version": "1.3.16",
+          "fileSha256": "0b234dea2bbfee739b7761e607a992c17fab88773014ef56355b6158cfb1cc53"
+        }
+      ],
+      "driftCheckedAt": "2026-10-13T04:21:23Z",
+      "verificationTier": "conformance-verified",
+      "verificationBadge": "authority-verified",
+      "verificationBadgeLabel": "Authority-checked",
+      "schematronVersion": "1.3.16",
+      "pdfInput": {
+        "containerChecked": false,
+        "attachmentFoundBy": "associated-file",
+        "attachmentCandidates": 1,
+        "attachmentName": "factur-x.xml"
+      }
+    }
+  ]
+}

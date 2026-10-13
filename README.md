@@ -1,6 +1,6 @@
 # beliq-validate-action
 
-Validate EU e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS) in your CI against beliq's authority-pinned, drift-checked rules. Point it at your invoice files: a non-compliant document fails the build, and every run leaves a per-file table in the job summary.
+Validate e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS, FatturaPA and the other formats beliq checks) in your CI. Point it at your invoice files: an invalid document fails the build, and every run leaves a per-file table in the job summary with each verdict and how deep its check went.
 
 It runs the published [`beliq-cli`](https://www.npmjs.com/package/beliq-cli), so the validation logic and the pass/fail contract are the same on your laptop and in CI.
 
@@ -55,7 +55,7 @@ The default `files` glob matches XML only. To check hybrid ZUGFeRD/Factur-X PDFs
 | `fail-on` | no | `error` | Severity threshold that fails the job: `error` or `warning`. |
 | `api-key` | yes | | Your beliq API key. Pass it from a repository secret. |
 | `base-url` | no | | Override the beliq API base URL (self-hosted deployments only). |
-| `cli-version` | no | `0.3.0` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
+| `cli-version` | no | <!-- renovate: datasource=npm depName=beliq-cli --> `0.4.0` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
 
 A `format` or `fail-on` value outside the listed ones fails the step before any file is sent.
 
@@ -65,18 +65,20 @@ A `format` or `fail-on` value outside the listed ones fails the step before any 
 |---|---|
 | `total` | Number of files validated. |
 | `invalid` | Number of files that failed the threshold. |
-| `results` | JSON array of per-file results (`{ file, status, format, errors, warnings, message }`). |
+| `results` | JSON array of per-file results (`{ file, status, format, errors, warnings, message, valid, verificationTier, verificationBadge, verificationBadgeLabel, franceCtcBlockingRuleIds, pdfInput }`). `status` is `pass`, `fail` or `error`; `valid` and the three verification fields are the API's own values, `null` where it sent none. |
 
 ## Behavior
 
-- The job **fails** (exit 1) if any file is not compliant at the chosen `fail-on` threshold, or if a file could not be validated (a bad key, quota, or unreadable file counts as a failure, not a silent pass).
-- If no file matches `files`, the run logs a warning and passes: an empty match is not a compliance failure.
-- Each run appends a Markdown table to the job's step summary: one row per file with its format, error/warning counts, and verdict.
+- Every matched file goes to the beliq API, which detects its format. The formats beliq checks, each with its rule pack, version and check depth, are listed at https://docs.beliq.eu/api-reference/rulesets/. A file the API cannot read or does not check gets an error row with the API's reason.
+- The job **fails** (exit 1) if any file fails the chosen `fail-on` threshold, carries France CTC blocking rule ids, or could not be validated (a bad key, quota, or unreadable file counts as a failure, not a silent pass).
+- A result with France CTC blocking rule ids (`franceCtcBlockingRuleIds`) fails its file under either `fail-on` value, also where `valid` is true: the API reports those ids as ending a transmission. The action applies this itself, so an older `cli-version` such as 0.3.0 does not pass such a file either.
+- If no file matches `files`, the run logs a warning and passes: an empty match is not a failed check.
+- Each run appends a Markdown table to the job's step summary: one row per file with its format, check depth, error/warning counts, and verdict. The verdict is the API's own word, `valid` or `invalid`. The check depth is the badge label the API gave the verdict, or `-` where it stated none; what each label means is at https://docs.beliq.eu/compliance/how-verification-works/. For a PDF the verdict is about the XML embedded in it, and the row says so.
 - Files go to `beliq-cli` in batches of up to 100 per process. A refused key, a forbidden request or a rate limit stops the run: the files not yet sent are reported as not checked, rather than each spending another call on the same answer.
 
 ## Versioning
 
-Releases are tagged `vMAJOR.MINOR.PATCH`, and a moving `v1` tag tracks the latest 1.x. Pin `@v1` for automatic compatible updates, or a full version (`@v1.1.0`) to freeze it.
+Releases are tagged `vMAJOR.MINOR.PATCH`, and a moving `v1` tag tracks the latest 1.x. Pin `@v1` to follow it, or a full version (`@v1.3.0`) to freeze it. A 1.x release keeps the inputs and the outputs, which can only gain fields. It can still turn a passing job red: a release moves the CLI pin, and a newer CLI can fail a file that an older one passed.
 
 Freezing means the whole thing. The validation itself runs in `beliq-cli`, which the action installs at run time, so a floating CLI would keep changing under a frozen action tag. Each release therefore defaults `cli-version` to one exact CLI version, and that default is part of what the tag freezes. Renovate raises a PR here when a newer `beliq-cli` ships, so the pin moves on a reviewed release rather than silently on every run. Set `cli-version` yourself to override it either way, including to `latest`.
 
@@ -93,7 +95,7 @@ npm test              # pure-logic unit tests, no network
 ./scripts/check-action-pins.sh   # every uses: names a commit SHA
 ```
 
-The live end-to-end test lives in `.github/workflows/test-action.yml`. It runs only when the `BELIQ_API_KEY` secret is present, validates a generated good fixture (expects 0 invalid) and a committed bad fixture (expects the job to fail), and so proves the action red-Xes a non-compliant invoice.
+The live end-to-end test lives in `.github/workflows/test-action.yml`. It runs only when the `BELIQ_API_KEY` secret is present, validates a generated good fixture (expects 0 invalid and a badge label in its `results` row) and a committed bad fixture (expects the job to fail), and so proves the action red-Xes an invalid invoice.
 
 ## License
 

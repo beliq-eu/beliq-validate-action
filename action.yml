@@ -1,5 +1,5 @@
 name: 'beliq e-invoice validate'
-description: 'Validate EN 16931 e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS) in CI. A non-compliant document fails the build.'
+description: 'Validate e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS, FatturaPA and more) in CI. Invalid documents fail the build.'
 author: 'beliq'
 branding:
   icon: 'check-circle'
@@ -37,16 +37,19 @@ inputs:
       follow the CLI instead.
     required: false
     # renovate: datasource=npm depName=beliq-cli
-    default: '0.3.0'
+    default: '0.4.0'
 outputs:
   total:
     description: 'Number of files validated.'
     value: ${{ steps.run.outputs.total }}
   invalid:
-    description: 'Number of files that failed the threshold.'
+    description: 'Number of files that failed: invalid, over the fail-on threshold, blocked by France CTC rules, or not checked.'
     value: ${{ steps.run.outputs.invalid }}
   results:
-    description: 'JSON array of per-file results ({ file, status, format, errors, warnings, message }).'
+    description: >-
+      JSON array of per-file results ({ file, status, format, errors, warnings,
+      message, valid, verificationTier, verificationBadge, verificationBadgeLabel,
+      franceCtcBlockingRuleIds, pdfInput }).
     value: ${{ steps.run.outputs.results }}
 runs:
   using: 'composite'

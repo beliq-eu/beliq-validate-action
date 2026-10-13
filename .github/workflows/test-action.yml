@@ -8,13 +8,14 @@ permissions:
   contents: read
 
 # Live end-to-end test of the action against the real beliq API. It proves the
-# CI promise: a non-compliant invoice fails the job.
+# CI promise: an invalid invoice fails the job, and a verdict reaches the
+# `results` output with the badge label of its check depth.
 #
 # The body spends 3 documents (one generate for the good fixture, then one
-# validate per fixture) against a key whose plan allows 20 a month, shared with
-# n8n-nodes-beliq and activepieces-beliq. Running it on pull_request as well as
-# push doubled the burn for a second reading of the same tree, so it runs on the
-# merge and on demand; `ci.yml` is what gates a pull request. The preflight job
+# validate per fixture) against the monthly allowance of the key in this repo's
+# BELIQ_API_KEY secret. Running it on pull_request as well as push doubled the
+# burn for a second reading of the same tree, so it runs on the merge and on
+# demand; `ci.yml` is what gates a pull request. The preflight job
 # then decides whether a run can complete before it spends anything.
 #
 # Gating at job level rather than per step means a run that cannot be exercised
@@ -91,7 +92,7 @@ jobs:
           set -uo pipefail
           mkdir -p fixtures/good fixtures/bad
           # renovate: datasource=npm depName=beliq-cli
-          if ! out="$(npx -y beliq-cli@0.3.0 generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml 2>&1)"; then
+          if ! out="$(npx -y beliq-cli@0.4.0 generate examples/invoice.json --standard xrechnung --output fixtures/good/invoice.xml 2>&1)"; then
             printf '%s\n' "$out"
             if printf '%s' "$out" | grep -q 'QUOTA_EXCEEDED'; then
               echo "quota_spent=true" >> "$GITHUB_OUTPUT"
@@ -113,9 +114,15 @@ jobs:
 
       - name: assert good passed
         if: steps.fixtures.outputs.quota_spent != 'true'
+        env:
+          RESULTS: ${{ steps.good.outputs.results }}
         run: |
           test "${{ steps.good.outputs.invalid }}" = "0" \
             || { echo "expected 0 invalid, got '${{ steps.good.outputs.invalid }}'"; exit 1; }
+          # The badge label travels from the API through the CLI's JSON into
+          # the output. A run that loses it on the way prints `-` as the depth.
+          printf '%s' "$RESULTS" | jq -e '.[0].verificationBadgeLabel | type == "string" and length > 0' >/dev/null \
+            || { echo "expected a verificationBadgeLabel in the good fixture's results row, got: $RESULTS"; exit 1; }
 
       - name: bad fixtures fail
         id: bad
@@ -130,6 +137,6 @@ jobs:
         if: steps.fixtures.outputs.quota_spent != 'true'
         run: |
           test "${{ steps.bad.outcome }}" = "failure" \
-            || { echo "expected the action to fail the job on a non-compliant invoice"; exit 1; }
+            || { echo "expected the action to fail the job on an invalid invoice"; exit 1; }
           test "${{ steps.bad.outputs.invalid }}" -ge "1" \
             || { echo "expected invalid >= 1, got '${{ steps.bad.outputs.invalid }}'"; exit 1; }

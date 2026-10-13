@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url'
 import process from 'node:process'
 
 // The action's job: run the published beliq CLI over every matched e-invoice,
-// summarize the verdicts, and fail the workflow if any file is not compliant.
+// summarize the verdicts with the depth of each check, and fail the workflow if
+// any file fails.
 // The CLI validates the files in batch mode and reports a verdict per file;
 // this runner owns the glob, the aggregation, the step summary, and the outputs.
 
@@ -39,7 +40,7 @@ export const DEFAULT_FILES = '**/*.xml'
 // .github/workflows/test-action.yml; a test binds all three, and the marker
 // comment above each one is what lets Renovate move them together.
 // renovate: datasource=npm depName=beliq-cli
-export const DEFAULT_CLI_VERSION = '0.3.0'
+export const DEFAULT_CLI_VERSION = '0.4.0'
 
 export function parseGlobs(input) {
   return String(input ?? '')
@@ -60,19 +61,62 @@ function reasonFor(exitCode) {
         : `exit ${exitCode}`
 }
 
-function counted(file, status, result, message = '') {
+// The API's own entry in `warnings` that explains `franceCtcBlockingRuleIds`.
+const FRANCE_BLOCK_ENTRY = 'FRANCE_CTC_FINDINGS_BLOCK_TRANSMISSION'
+
+/**
+ * The text that explains a France CTC block: the API's own message for it, and
+ * the rule ids unless that message already names every one. The same lines
+ * beliq-cli prints (`src/verdict.ts`, franceBlockLines).
+ */
+export function franceBlockText(result) {
+  const ids = result?.franceCtcBlockingRuleIds ?? []
+  if (ids.length === 0) return ''
+  const entry = (result.warnings ?? []).find((w) => w?.ruleId === FRANCE_BLOCK_ENTRY)
+  const idLine = `France CTC blocking rule ids: ${ids.join(', ')}`
+  if (!entry) return idLine
+  const named = new Set(String(entry.message).split(/[^A-Za-z0-9_-]+/))
+  return ids.every((id) => named.has(id)) ? entry.message : `${entry.message} ${idLine}`
+}
+
+/**
+ * One validated file. A result that carries France CTC blocking rule ids fails
+ * even where the CLI passed it: beliq-cli 0.4.0 already fails such a file, and
+ * an older `cli-version` does not.
+ */
+function counted(file, status, result) {
+  const franceIds = result?.franceCtcBlockingRuleIds ?? []
   return {
     file,
-    status,
+    status: franceIds.length > 0 ? 'fail' : status,
     format: result?.format ?? '',
     errors: result?.errors?.length ?? 0,
     warnings: result?.warnings?.length ?? 0,
-    message,
+    message: franceBlockText(result),
+    valid: typeof result?.valid === 'boolean' ? result.valid : null,
+    verificationTier: result?.verificationTier ?? null,
+    verificationBadge: result?.verificationBadge ?? null,
+    verificationBadgeLabel: result?.verificationBadgeLabel ?? null,
+    franceCtcBlockingRuleIds: franceIds,
+    pdfInput: result?.pdfInput ?? null,
   }
 }
 
 function errored(file, message) {
-  return { file, status: 'error', format: '', errors: 0, warnings: 0, message }
+  return {
+    file,
+    status: 'error',
+    format: '',
+    errors: 0,
+    warnings: 0,
+    message,
+    valid: null,
+    verificationTier: null,
+    verificationBadge: null,
+    verificationBadgeLabel: null,
+    franceCtcBlockingRuleIds: [],
+    pdfInput: null,
+  }
 }
 
 function parseJson(text) {
@@ -127,26 +171,58 @@ export function aggregate(results) {
   }
 }
 
+export const VERIFICATION_DOC = 'https://docs.beliq.eu/compliance/how-verification-works/'
+
+/** API text goes into a table cell, where a pipe or a line break would end it. */
+function cell(text) {
+  return String(text).replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+}
+
+/**
+ * A file's verdict in the API's own words, `valid` or `invalid`, with what else
+ * decided it: a France CTC block, or the `fail-on` threshold. A PDF's verdict is
+ * about the XML embedded in it, and the API says so in `pdfInput`.
+ */
+export function verdictText(r) {
+  if (r.status === 'error') return r.message
+  const word = r.valid === false ? 'invalid' : 'valid'
+  const notes = []
+  if (r.message) notes.push(r.message)
+  else if (r.status === 'fail' && r.valid !== false) notes.push('Fails the `fail-on` threshold.')
+  if (r.pdfInput) notes.push('The verdict is about the embedded XML; the PDF itself was not checked.')
+  return notes.length > 0 ? `${word}. ${notes.join(' ')}` : word
+}
+
 export function renderSummary(results) {
   const { total, invalid } = aggregate(results)
+  if (total === 0) return '## beliq validate: no file matched\n'
   const head =
     invalid === 0
-      ? `## beliq validate: all ${total} file(s) compliant`
-      : `## beliq validate: ${invalid} of ${total} file(s) not compliant`
+      ? `## beliq validate: all ${total} file(s) passed`
+      : `## beliq validate: ${invalid} of ${total} file(s) failed`
   const rows = results.map((r) => {
     const icon = r.status === 'pass' ? '✅' : '❌'
-    const verdict =
-      r.status === 'pass' ? 'compliant' : r.status === 'fail' ? 'not compliant' : r.message
-    return `| ${icon} | \`${r.file}\` | ${r.format || '-'} | ${r.errors} | ${r.warnings} | ${verdict} |`
+    const depth = r.verificationBadgeLabel ?? '-'
+    return `| ${icon} | \`${r.file}\` | ${r.format || '-'} | ${depth} | ${r.errors} | ${r.warnings} | ${cell(verdictText(r))} |`
   })
   return [
     head,
     '',
-    '| | File | Format | Errors | Warnings | Verdict |',
-    '|---|---|---|---|---|---|',
+    '| | File | Format | Check depth | Errors | Warnings | Verdict |',
+    '|---|---|---|---|---|---|---|',
     ...rows,
     '',
+    `Check depth is the badge beliq gave the verdict, explained at ${VERIFICATION_DOC}. \`-\` means none was stated.`,
+    '',
   ].join('\n')
+}
+
+/** The line each file leaves in the step's log. */
+export function logLine(r) {
+  if (r.status === 'error') return `FAIL ${r.file}: ${r.message}`
+  const depth = r.verificationBadgeLabel ?? 'check depth not stated'
+  const note = r.message ? `: ${r.message}` : ''
+  return `${r.status === 'pass' ? 'PASS' : 'FAIL'} ${r.file} (${depth})${note}`
 }
 
 /**
@@ -274,7 +350,7 @@ export async function main() {
   }
 
   const results = validateAll(files, { cliVersion, format, failOn, baseUrl }, runCli, (batch) => {
-    for (const r of batch) process.stdout.write(`${r.status === 'pass' ? 'PASS' : 'FAIL'} ${r.file}\n`)
+    for (const r of batch) process.stdout.write(`${logLine(r)}\n`)
   })
 
   await writeSummary(results)

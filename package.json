@@ -1,8 +1,8 @@
 {
   "name": "beliq-validate-action",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
-  "description": "GitHub Action that validates EU e-invoices in CI against beliq authority-pinned rules.",
+  "description": "GitHub Action that validates e-invoices in CI with beliq and shows how deep each check went.",
   "type": "module",
   "license": "MIT",
   "author": "beliq <hello@beliq.eu>",
