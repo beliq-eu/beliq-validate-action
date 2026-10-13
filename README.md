@@ -74,7 +74,7 @@ A `format` or `fail-on` value outside the listed ones fails the step before any 
 - A result with France CTC blocking rule ids (`franceCtcBlockingRuleIds`) fails its file under either `fail-on` value, also where `valid` is true: the API reports those ids as ending a transmission. The action applies this itself, so an older `cli-version` such as 0.3.0 does not pass such a file either.
 - If no file matches `files`, the run logs a warning and passes: an empty match is not a failed check.
 - Each run appends a Markdown table to the job's step summary: one row per file with its format, check depth, error/warning counts, and verdict. The verdict is the API's own word, `valid` or `invalid`. The check depth is the badge label the API gave the verdict, or `-` where it stated none; what each label means is at https://docs.beliq.eu/compliance/how-verification-works/. For a PDF the verdict is about the XML embedded in it, and the row says so.
-- Files go to `beliq-cli` in batches of up to 100 per process. A refused key, a forbidden request or a rate limit stops the run: the files not yet sent are reported as not checked, rather than each spending another call on the same answer.
+- Files go to `beliq-cli` in batches of up to 100 per process. A refused key, a forbidden request or a rate limit stops the run: every file of that batch gets the error in place of its verdict, already checked ones included, and the files not yet sent are reported as not checked, rather than each spending another call on the same answer.
 
 ## Versioning
 
