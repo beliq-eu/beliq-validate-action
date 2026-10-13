@@ -64,7 +64,7 @@ A `format` or `fail-on` value outside the listed ones fails the step before any 
 | Output | Description |
 |---|---|
 | `total` | Number of files validated. |
-| `invalid` | Number of files that failed the threshold. |
+| `invalid` | Number of files that failed: invalid, over the `fail-on` threshold, blocked by France CTC rules, or not checked. |
 | `results` | JSON array of per-file results (`{ file, status, format, errors, warnings, message, valid, verificationTier, verificationBadge, verificationBadgeLabel, franceCtcBlockingRuleIds, pdfInput }`). `status` is `pass`, `fail` or `error`; `valid` and the three verification fields are the API's own values, `null` where it sent none. |
 
 ## Behavior
