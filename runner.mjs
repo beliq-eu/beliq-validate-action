@@ -175,10 +175,12 @@ export const VERIFICATION_DOC = 'https://docs.beliq.eu/compliance/how-verificati
 /**
  * API text goes into a table cell of the step summary, which GitHub renders as
  * Markdown with HTML: a pipe or a line break would end the cell, and a quoted
- * `<Invoice>` would be read as a tag.
+ * `<Invoice>` would be read as a tag. A backslash is escaped first, or one
+ * before a pipe would cancel the pipe's escape.
  */
 function cell(text) {
   return String(text)
+    .replace(/\\/g, '\\\\')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')

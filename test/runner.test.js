@@ -321,6 +321,11 @@ describe('renderSummary', () => {
     const row = classifyRun(['x.xml'], 3, report).results[0]
     expect(renderSummary([row])).toContain('| API error 400: a \\| b &lt;Invoice&gt; c |')
   })
+  it('keeps a backslash before a pipe from reopening the cell', () => {
+    const report = JSON.stringify({ results: [{ file: 'x.xml', status: 'error', message: 'a \\| b' }] })
+    const row = classifyRun(['x.xml'], 3, report).results[0]
+    expect(renderSummary([row])).toContain('| a \\\\\\| b |')
+  })
   it('does not call a verdict valid when the CLI row carries no valid field', () => {
     const report = JSON.stringify({ results: [{ file: 'n.xml', status: 'pass', format: 'ubl', errors: [], warnings: [] }] })
     expect(verdictText(classifyRun(['n.xml'], 0, report).results[0])).toBe('verdict not stated')
