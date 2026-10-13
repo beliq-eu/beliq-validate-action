@@ -78,7 +78,7 @@ A `format` or `fail-on` value outside the listed ones fails the step before any 
 
 ## Versioning
 
-Releases are tagged `vMAJOR.MINOR.PATCH`, and a moving `v1` tag tracks the latest 1.x. Pin `@v1` to follow it, or a full version (`@v1.3.0`) to freeze it. A 1.x release keeps the inputs and the outputs, which can only gain fields. It can still turn a passing job red: a release moves the CLI pin, and a newer CLI can fail a file that an older one passed.
+Releases are tagged `vMAJOR.MINOR.PATCH`, and a moving `v1` tag tracks the latest 1.x. Pin `@v1` to follow it, or a full version (`@v1.3.0`) to freeze it. A 1.x release keeps the inputs and the output fields, and an output can only gain new ones. A release can still change a file's `status` and turn a passing job red, as 1.3.0 did for a file that carries France CTC blocking rule ids: it can move the CLI pin, and it can tighten what fails a file.
 
 Freezing means the whole thing. The validation itself runs in `beliq-cli`, which the action installs at run time, so a floating CLI would keep changing under a frozen action tag. Each release therefore defaults `cli-version` to one exact CLI version, and that default is part of what the tag freezes. Renovate raises a PR here when a newer `beliq-cli` ships, so the pin moves on a reviewed release rather than silently on every run. Set `cli-version` yourself to override it either way, including to `latest`.
 

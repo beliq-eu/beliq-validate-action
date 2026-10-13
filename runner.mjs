@@ -36,9 +36,9 @@ export const DEFAULT_FILES = '**/*.xml'
 // The CLI version the action runs when the caller does not name one. It is an
 // exact version, not `latest`: README.md promises that pinning a full action
 // version freezes behaviour, and a floating CLI breaks that promise on a tag
-// that is never rebuilt. The same version is written in action.yml and in
-// .github/workflows/test-action.yml; a test binds all three, and the marker
-// comment above each one is what lets Renovate move them together.
+// that is never rebuilt. The same version is written in action.yml,
+// .github/workflows/test-action.yml and README.md; a test binds all four, and
+// the marker comment at each one is what lets Renovate move them together.
 // renovate: datasource=npm depName=beliq-cli
 export const DEFAULT_CLI_VERSION = '0.4.0'
 
@@ -72,12 +72,24 @@ const FRANCE_BLOCK_ENTRY = 'FRANCE_CTC_FINDINGS_BLOCK_TRANSMISSION'
 export function franceBlockText(result) {
   const ids = result?.franceCtcBlockingRuleIds ?? []
   if (ids.length === 0) return ''
-  const entry = (result.warnings ?? []).find((w) => w?.ruleId === FRANCE_BLOCK_ENTRY)
+  const entry = (result.warnings ?? []).find(
+    (w) => w?.ruleId === FRANCE_BLOCK_ENTRY && typeof w.message === 'string' && w.message,
+  )
   const idLine = `France CTC blocking rule ids: ${ids.join(', ')}`
   if (!entry) return idLine
-  const named = new Set(String(entry.message).split(/[^A-Za-z0-9_-]+/))
+  const named = new Set(entry.message.split(/[^A-Za-z0-9_-]+/))
   return ids.every((id) => named.has(id)) ? entry.message : `${entry.message} ${idLine}`
 }
+
+/** The verdict fields of a row that carries no verdict. */
+export const NO_VERDICT = Object.freeze({
+  valid: null,
+  verificationTier: null,
+  verificationBadge: null,
+  verificationBadgeLabel: null,
+  franceCtcBlockingRuleIds: [],
+  pdfInput: null,
+})
 
 /**
  * One validated file. A result that carries France CTC blocking rule ids fails
@@ -103,20 +115,7 @@ function counted(file, status, result) {
 }
 
 function errored(file, message) {
-  return {
-    file,
-    status: 'error',
-    format: '',
-    errors: 0,
-    warnings: 0,
-    message,
-    valid: null,
-    verificationTier: null,
-    verificationBadge: null,
-    verificationBadgeLabel: null,
-    franceCtcBlockingRuleIds: [],
-    pdfInput: null,
-  }
+  return { file, status: 'error', format: '', errors: 0, warnings: 0, message, ...NO_VERDICT, franceCtcBlockingRuleIds: [] }
 }
 
 function parseJson(text) {
@@ -173,9 +172,18 @@ export function aggregate(results) {
 
 export const VERIFICATION_DOC = 'https://docs.beliq.eu/compliance/how-verification-works/'
 
-/** API text goes into a table cell, where a pipe or a line break would end it. */
+/**
+ * API text goes into a table cell of the step summary, which GitHub renders as
+ * Markdown with HTML: a pipe or a line break would end the cell, and a quoted
+ * `<Invoice>` would be read as a tag.
+ */
 function cell(text) {
-  return String(text).replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\|/g, '\\|')
 }
 
 /**
@@ -185,10 +193,10 @@ function cell(text) {
  */
 export function verdictText(r) {
   if (r.status === 'error') return r.message
-  const word = r.valid === false ? 'invalid' : 'valid'
+  const word = r.valid === true ? 'valid' : r.valid === false ? 'invalid' : 'verdict not stated'
   const notes = []
   if (r.message) notes.push(r.message)
-  else if (r.status === 'fail' && r.valid !== false) notes.push('Fails the `fail-on` threshold.')
+  else if (r.status === 'fail' && r.valid === true) notes.push('Fails the `fail-on` threshold.')
   if (r.pdfInput) notes.push('The verdict is about the embedded XML; the PDF itself was not checked.')
   return notes.length > 0 ? `${word}. ${notes.join(' ')}` : word
 }
@@ -202,8 +210,9 @@ export function renderSummary(results) {
       : `## beliq validate: ${invalid} of ${total} file(s) failed`
   const rows = results.map((r) => {
     const icon = r.status === 'pass' ? '✅' : '❌'
-    const depth = r.verificationBadgeLabel ?? '-'
-    return `| ${icon} | \`${r.file}\` | ${r.format || '-'} | ${depth} | ${r.errors} | ${r.warnings} | ${cell(verdictText(r))} |`
+    const depth = r.verificationBadgeLabel ? cell(r.verificationBadgeLabel) : '-'
+    const format = r.format ? cell(r.format) : '-'
+    return `| ${icon} | \`${r.file}\` | ${format} | ${depth} | ${r.errors} | ${r.warnings} | ${cell(verdictText(r))} |`
   })
   return [
     head,

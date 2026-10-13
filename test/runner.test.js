@@ -15,6 +15,7 @@ import {
   DEFAULT_FILES,
   DEFAULT_CLI_VERSION,
   VERIFICATION_DOC,
+  NO_VERDICT,
   verdictText,
   logLine,
 } from '../runner.mjs'
@@ -48,16 +49,8 @@ const liveFiles = JSON.parse(liveBatch).results.map((row) => row.file)
 // unchanged with --json, and it cannot send the channel header itself.
 const franceResult = readFileSync(new URL('./api-validate-france-previous.json', import.meta.url), 'utf8')
 
-/** The fields a row gains from a verdict, all empty, for rows that carry none. */
-const noVerdict = {
-  valid: null,
-  verificationTier: null,
-  verificationBadge: null,
-  verificationBadgeLabel: null,
-  franceCtcBlockingRuleIds: [],
-  pdfInput: null,
-}
-/** The same fields for a 0.2.2 row, which predates the badge. */
+const noVerdict = { ...NO_VERDICT }
+/** The verdict fields of a 0.2.2 row, which predates the badge. */
 const unbadged = (valid) => ({ ...noVerdict, valid })
 
 /** One file through classifyRun, for the tests that only need a row. */
@@ -157,6 +150,11 @@ describe('classifyRun over a live beliq-cli 0.4.0 batch', () => {
     driftCheckedAt: 'dropped: a ruleset detail, in the CLI output',
     italyFatturapaRuntimeVersion: 'dropped: a ruleset detail, in the CLI output',
     italyFatturapaXsdBundle: 'dropped: a ruleset detail, in the CLI output',
+    franceCtcApplied: 'dropped: a ruleset detail, in the CLI output',
+    franceCtcVersion: 'dropped: a ruleset detail, in the CLI output',
+    rulesetChannel: 'dropped: which channel served the verdict; the CLI prints it',
+    rulesetFellBack: 'dropped: which channel served the verdict; the CLI prints it',
+    rulesetSunsetsOn: 'dropped: which channel served the verdict; the CLI prints it',
   }
 
   it('carries the badge label of each verdict, and null where the API sent none', () => {
@@ -174,7 +172,7 @@ describe('classifyRun over a live beliq-cli 0.4.0 batch', () => {
   })
 
   it('names every key the CLI puts on a row', () => {
-    for (const row of JSON.parse(liveBatch).results) {
+    for (const row of [...JSON.parse(liveBatch).results, { file: 'france', ...JSON.parse(franceResult) }]) {
       for (const key of Object.keys(row)) {
         expect(ROW_KEYS, `${row.file}: the CLI row key "${key}" is not named in ROW_KEYS`).toHaveProperty(key)
       }
@@ -199,6 +197,17 @@ describe('a France CTC block fails the file', () => {
   it('in a batch row that an older CLI marked as a pass', () => {
     const report = JSON.stringify({ results: [{ file: 'fr.xml', status: 'pass', ...france }] })
     expect(classifyRun(['fr.xml'], 0, report).results[0]).toMatchObject({ status: 'fail', valid: true })
+  })
+
+  it('names the ids itself when the block entry carries no message', () => {
+    const noMessage = JSON.stringify({
+      valid: true,
+      format: 'cii',
+      errors: [],
+      warnings: [{ ruleId: 'FRANCE_CTC_FINDINGS_BLOCK_TRANSMISSION', severity: 'info' }],
+      franceCtcBlockingRuleIds: ['BR-FR-10_BT-30'],
+    })
+    expect(one('fr.xml', 0, noMessage).message).toBe('France CTC blocking rule ids: BR-FR-10_BT-30')
   })
 
   it('names the ids itself when the API sent no message that names them all', () => {
@@ -308,8 +317,13 @@ describe('renderSummary', () => {
     expect(row).toMatch(/^\| ❌ \| `fr\.xml` \| cii \| Authority-checked \| 0 \| 10 \| valid\. A plateforme agréée refuses/)
   })
   it('keeps API text from breaking the table', () => {
-    const row = one('x.xml', 3, '', 'beliq: API error 400: a | b\nc')
-    expect(renderSummary([row])).toContain('a \\| b')
+    const report = JSON.stringify({ results: [{ file: 'x.xml', status: 'error', message: 'API error 400: a | b <Invoice>\nc' }] })
+    const row = classifyRun(['x.xml'], 3, report).results[0]
+    expect(renderSummary([row])).toContain('| API error 400: a \\| b &lt;Invoice&gt; c |')
+  })
+  it('does not call a verdict valid when the CLI row carries no valid field', () => {
+    const report = JSON.stringify({ results: [{ file: 'n.xml', status: 'pass', format: 'ubl', errors: [], warnings: [] }] })
+    expect(verdictText(classifyRun(['n.xml'], 0, report).results[0])).toBe('verdict not stated')
   })
   it('says no file matched for an empty match', () => {
     expect(renderSummary([])).toBe('## beliq validate: no file matched\n')
@@ -430,7 +444,7 @@ describe('the beliq-cli version is written in four files', () => {
   })
 
   it('no beliq-cli@latest survives anywhere', async () => {
-    // README.md:62 promises that a full version tag freezes behaviour. The
+    // README.md, "Versioning", promises that a full version tag freezes behaviour. The
     // validation runs in the CLI, so one `latest` left behind unfreezes it.
     for (const { path } of sites) {
       expect(await read(path), `${path} still floats the CLI`).not.toMatch(/beliq-cli@latest|'latest'/)
