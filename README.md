@@ -1,6 +1,6 @@
 # beliq-validate-action
 
-Validate e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS, FatturaPA and the other formats beliq checks) in your CI. Point it at your invoice files: an invalid document fails the build, and every run leaves a per-file table in the job summary with each verdict and how deep its check went.
+Validate e-invoices (XRechnung, ZUGFeRD, Factur-X, Peppol BIS, FatturaPA and the other formats [beliq](https://beliq.eu) checks) in your CI. Point it at your invoice files: an invalid document fails the build, and every run leaves a per-file table in the job summary with each verdict and how deep its check went.
 
 It runs the published [`beliq-cli`](https://www.npmjs.com/package/beliq-cli), so the validation logic and the pass/fail contract are the same on your laptop and in CI.
 
