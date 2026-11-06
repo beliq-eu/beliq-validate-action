@@ -252,12 +252,36 @@ describe('validateAll', () => {
     expect(results.at(-1).message).toBe('not checked: API error: beliq: API error 429 (RATE_LIMITED): slow down')
   })
 
+  it('stops after a run an outage ended, and gives the rest that file\'s error', () => {
+    let calls = 0
+    const results = validateAll(files(2 * FILES_PER_RUN), {}, (batch) => {
+      calls++
+      const rows = batch.map((file, i) => i === 0
+        ? { file, status: 'error', message: 'API error 503 (DATABASE_UNAVAILABLE): database unavailable' }
+        : { file, status: 'error', message: `not checked: the API was unavailable for ${batch[0]}, so the batch stopped` })
+      return { exitCode: 3, stdout: JSON.stringify({ stoppedAt: batch[0], results: rows }), stderr: '' }
+    })
+    expect(calls).toBe(1)
+    expect(results).toHaveLength(2 * FILES_PER_RUN)
+    expect(results.at(-1).message).toBe('not checked: f0.xml: API error 503 (DATABASE_UNAVAILABLE): database unavailable')
+  })
+
   it('keeps going after a run whose files merely errored one by one', () => {
     let calls = 0
     validateAll(files(FILES_PER_RUN + 2), {}, (batch) => {
       calls++
       const results = batch.map((file) => ({ file, status: 'error', message: 'API error 400 (PARSE_FAILED): nope' }))
       return { exitCode: 3, stdout: JSON.stringify({ results }), stderr: '' }
+    })
+    expect(calls).toBe(2)
+  })
+
+  it('keeps going after a report whose stoppedAt is null', () => {
+    let calls = 0
+    validateAll(files(FILES_PER_RUN + 2), {}, (batch) => {
+      calls++
+      const results = batch.map((file) => ({ file, status: 'error', message: 'API error 400 (PARSE_FAILED): nope' }))
+      return { exitCode: 3, stdout: JSON.stringify({ stoppedAt: null, results }), stderr: '' }
     })
     expect(calls).toBe(2)
   })

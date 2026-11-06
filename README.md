@@ -75,6 +75,7 @@ A `format` or `fail-on` value outside the listed ones fails the step before any 
 - If no file matches `files`, the run logs a warning and passes: an empty match is not a failed check.
 - Each run appends a Markdown table to the job's step summary: one row per file with its format, check depth, error/warning counts, and verdict. The verdict is the API's own word, `valid` or `invalid`. The check depth is the badge label the API gave the verdict, or `-` where it stated none; what each label means is at https://docs.beliq.eu/compliance/how-verification-works/. For a PDF the verdict is about the XML embedded in it, and the row says so.
 - Files go to `beliq-cli` in batches of up to 100 per process. A refused key, a forbidden request or a rate limit stops the run: every file of that batch gets the error in place of its verdict, already checked ones included, and the files not yet sent are reported as not checked, rather than each spending another call on the same answer.
+- An outage stops the run too. With the default `cli-version`, the CLI retries an outage (a `503` `DATABASE_UNAVAILABLE`, a `502` or `503` from a proxy in front of the API, or a connection that could not be opened) for up to 15 minutes, plus the last attempt's own deadline of up to 90 seconds, so a step that meets one can take that long. When it gives up, the file it gave up on gets the error, and every file after it, in its batch and in the batches not yet sent, is reported as not checked with that file's error. A misspelt `base-url` counts as an outage too.
 
 ## Versioning
 
