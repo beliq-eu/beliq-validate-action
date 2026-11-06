@@ -43,6 +43,12 @@ const batchFiles = ['inv/a.xml', 'inv/b.xml', 'inv/c.xml', 'inv/d.xml']
 const liveBatch = readFileSync(new URL('./cli-0.4.0-batch.json', import.meta.url), 'utf8')
 const liveFiles = JSON.parse(liveBatch).results.map((row) => row.file)
 
+// Printed by beliq-cli 0.5.0 (`validate inv/a.xml inv/b.xml inv/c.xml --json`,
+// exit 3) against a local stub that answers every request with the API's 503
+// DATABASE_UNAVAILABLE body and `Retry-After: 3600`, longer than the SDK's retry
+// budget, so the SDK gives up at once instead of after 15 minutes.
+const outageBatch = readFileSync(new URL('./cli-0.5.0-outage-batch.json', import.meta.url), 'utf8')
+
 // The live API's answer to one validate of a French Factur-X document on the
 // `previous` ruleset channel, 2026-10-11: `valid` is true and the result
 // carries France CTC blocking rule ids. beliq-cli prints a single file's result
@@ -122,6 +128,17 @@ describe('classifyRun, a batch', () => {
     const { results, failed } = classifyRun(['a.xml', 'b.xml'], 0, validJson)
     expect(failed).toBe(true)
     expect(results.map((r) => r.status)).toEqual(['error', 'error'])
+  })
+})
+
+describe('classifyRun over a beliq-cli 0.5.0 batch an outage stopped', () => {
+  it('counts the run as failed and gives the stop file\'s error as the reason', () => {
+    const files = ['inv/a.xml', 'inv/b.xml', 'inv/c.xml']
+    const { results, failed, reason } = classifyRun(files, 3, outageBatch)
+    expect(failed).toBe(true)
+    expect(reason).toBe('inv/a.xml: API error 503 (DATABASE_UNAVAILABLE): The database is temporarily unavailable. Retry after the Retry-After interval.')
+    expect(results.map((r) => r.status)).toEqual(['error', 'error', 'error'])
+    expect(results[1].message).toBe('not checked: the API was unavailable for inv/a.xml, so the batch stopped')
   })
 })
 

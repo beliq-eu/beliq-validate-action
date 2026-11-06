@@ -1,0 +1,24 @@
+{
+  "total": 3,
+  "passed": 0,
+  "failed": 0,
+  "errored": 3,
+  "stoppedAt": "inv/a.xml",
+  "results": [
+    {
+      "file": "inv/a.xml",
+      "status": "error",
+      "message": "API error 503 (DATABASE_UNAVAILABLE): The database is temporarily unavailable. Retry after the Retry-After interval."
+    },
+    {
+      "file": "inv/b.xml",
+      "status": "error",
+      "message": "not checked: the API was unavailable for inv/a.xml, so the batch stopped"
+    },
+    {
+      "file": "inv/c.xml",
+      "status": "error",
+      "message": "not checked: the API was unavailable for inv/a.xml, so the batch stopped"
+    }
+  ]
+}
