@@ -43,6 +43,12 @@ const batchFiles = ['inv/a.xml', 'inv/b.xml', 'inv/c.xml', 'inv/d.xml']
 const liveBatch = readFileSync(new URL('./cli-0.4.0-batch.json', import.meta.url), 'utf8')
 const liveFiles = JSON.parse(liveBatch).results.map((row) => row.file)
 
+// Printed by beliq-cli 0.5.0 (`validate inv/a.xml inv/b.xml inv/c.xml --json`,
+// exit 3) against a local stub that answers every request with the API's 503
+// DATABASE_UNAVAILABLE body and `Retry-After: 3600`, longer than the SDK's retry
+// budget, so the SDK gives up at once instead of after 15 minutes.
+const outageBatch = readFileSync(new URL('./cli-0.5.0-outage-batch.json', import.meta.url), 'utf8')
+
 // The live API's answer to one validate of a French Factur-X document on the
 // `previous` ruleset channel, 2026-10-11: `valid` is true and the result
 // carries France CTC blocking rule ids. beliq-cli prints a single file's result
@@ -122,6 +128,17 @@ describe('classifyRun, a batch', () => {
     const { results, failed } = classifyRun(['a.xml', 'b.xml'], 0, validJson)
     expect(failed).toBe(true)
     expect(results.map((r) => r.status)).toEqual(['error', 'error'])
+  })
+})
+
+describe('classifyRun over a beliq-cli 0.5.0 batch an outage stopped', () => {
+  it('counts the run as failed and gives the stop file\'s error as the reason', () => {
+    const files = ['inv/a.xml', 'inv/b.xml', 'inv/c.xml']
+    const { results, failed, reason } = classifyRun(files, 3, outageBatch)
+    expect(failed).toBe(true)
+    expect(reason).toBe('inv/a.xml: API error 503 (DATABASE_UNAVAILABLE): The database is temporarily unavailable. Retry after the Retry-After interval.')
+    expect(results.map((r) => r.status)).toEqual(['error', 'error', 'error'])
+    expect(results[1].message).toBe('not checked: the API was unavailable for inv/a.xml, so the batch stopped')
   })
 })
 
@@ -252,12 +269,36 @@ describe('validateAll', () => {
     expect(results.at(-1).message).toBe('not checked: API error: beliq: API error 429 (RATE_LIMITED): slow down')
   })
 
+  it('stops after a run an outage ended, and gives the rest that file\'s error', () => {
+    let calls = 0
+    const results = validateAll(files(2 * FILES_PER_RUN), {}, (batch) => {
+      calls++
+      const rows = batch.map((file, i) => i === 0
+        ? { file, status: 'error', message: 'API error 503 (DATABASE_UNAVAILABLE): database unavailable' }
+        : { file, status: 'error', message: `not checked: the API was unavailable for ${batch[0]}, so the batch stopped` })
+      return { exitCode: 3, stdout: JSON.stringify({ stoppedAt: batch[0], results: rows }), stderr: '' }
+    })
+    expect(calls).toBe(1)
+    expect(results).toHaveLength(2 * FILES_PER_RUN)
+    expect(results.at(-1).message).toBe('not checked: f0.xml: API error 503 (DATABASE_UNAVAILABLE): database unavailable')
+  })
+
   it('keeps going after a run whose files merely errored one by one', () => {
     let calls = 0
     validateAll(files(FILES_PER_RUN + 2), {}, (batch) => {
       calls++
       const results = batch.map((file) => ({ file, status: 'error', message: 'API error 400 (PARSE_FAILED): nope' }))
       return { exitCode: 3, stdout: JSON.stringify({ results }), stderr: '' }
+    })
+    expect(calls).toBe(2)
+  })
+
+  it('keeps going after a report whose stoppedAt is null', () => {
+    let calls = 0
+    validateAll(files(FILES_PER_RUN + 2), {}, (batch) => {
+      calls++
+      const results = batch.map((file) => ({ file, status: 'error', message: 'API error 400 (PARSE_FAILED): nope' }))
+      return { exitCode: 3, stdout: JSON.stringify({ stoppedAt: null, results }), stderr: '' }
     })
     expect(calls).toBe(2)
   })

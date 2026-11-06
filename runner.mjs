@@ -17,8 +17,9 @@ const FORMATS = new Set(['auto', 'cii', 'ubl'])
 const MAX_BUFFER = 16 * 1024 * 1024
 
 // Files per CLI run. One run validates its files in sequence and stops on a
-// refused key, a forbidden request or a rate limit instead of trying the rest;
-// the cap only keeps the argument list far below the OS limit on a large tree.
+// refused key, a forbidden request, a rate limit or (beliq-cli 0.5.0 and later)
+// an outage instead of trying the rest; the cap only keeps the argument list
+// far below the OS limit on a large tree.
 export const FILES_PER_RUN = 100
 
 // The default glob is `**/*.xml`, which in a consumer's checkout also matches
@@ -40,7 +41,7 @@ export const DEFAULT_FILES = '**/*.xml'
 // .github/workflows/test-action.yml and README.md; a test binds all four, and
 // the marker comment at each one is what lets Renovate move them together.
 // renovate: datasource=npm depName=beliq-cli
-export const DEFAULT_CLI_VERSION = '0.4.1'
+export const DEFAULT_CLI_VERSION = '0.5.0'
 
 export function parseGlobs(input) {
   return String(input ?? '')
@@ -134,7 +135,11 @@ function parseJson(text) {
  * prints for a single named file. Anything else means the run as a whole
  * failed (a refused key, an unreachable API, npx itself), and every file in it
  * gets that reason. `failed` says so, so the caller can stop instead of
- * repeating the same failure for the next run.
+ * repeating the same failure for the next run, and `reason` is what to give the
+ * files it does not send. A report whose `stoppedAt` names a file is a run an
+ * outage ended early (beliq-cli 0.5.0 and later): another run would wait out the
+ * SDK's retry budget on the same outage, so it counts as failed too, with that
+ * file's error as the reason.
  *
  * Exit 0 or 1 without a verdict is an error, not a failed document: beliq-cli
  * 0.2.2 and earlier exit 1 when the API cannot be reached.
@@ -150,6 +155,11 @@ export function classifyRun(files, exitCode, stdout, stderr = '') {
       if (row.status === 'pass' || row.status === 'fail') return counted(file, row.status, row)
       return errored(file, row.message ?? 'not checked')
     })
+    if (typeof parsed.stoppedAt === 'string') {
+      const stop = rows.get(parsed.stoppedAt)
+      const reason = stop?.message ? `${parsed.stoppedAt}: ${stop.message}` : `the CLI stopped at ${parsed.stoppedAt}`
+      return { results, failed: true, reason }
+    }
     return { results, failed: false }
   }
 
@@ -160,7 +170,7 @@ export function classifyRun(files, exitCode, stdout, stderr = '') {
   const detail = firstLine(stderr)
   const reason = exitCode === 0 || exitCode === 1 ? `no verdict (exit ${exitCode})` : reasonFor(exitCode)
   const message = detail ? `${reason}: ${detail}` : reason
-  return { results: files.map((file) => errored(file, message)), failed: true }
+  return { results: files.map((file) => errored(file, message)), failed: true, reason: message }
 }
 
 export function aggregate(results) {
@@ -269,20 +279,20 @@ function runCli(files, { cliVersion, format, failOn, baseUrl }) {
 
 /**
  * Validate `files` in runs of FILES_PER_RUN. After a run that failed as a
- * whole, the remaining files are marked with its reason and not sent: the
- * same key, quota and network would fail them the same way.
+ * whole or that an outage stopped, the remaining files are marked with its
+ * reason and not sent: the same key, quota, network or outage would fail them
+ * the same way.
  */
 export function validateAll(files, opts, run = runCli, onRun = () => {}) {
   const results = []
   for (let i = 0; i < files.length; i += FILES_PER_RUN) {
     const batch = files.slice(i, i + FILES_PER_RUN)
     const { exitCode, stdout, stderr } = run(batch, opts)
-    const { results: batchResults, failed } = classifyRun(batch, exitCode, stdout, stderr)
+    const { results: batchResults, failed, reason } = classifyRun(batch, exitCode, stdout, stderr)
     results.push(...batchResults)
     onRun(batchResults)
     if (failed) {
-      const reason = `not checked: ${batchResults[0].message}`
-      for (const file of files.slice(i + FILES_PER_RUN)) results.push(errored(file, reason))
+      for (const file of files.slice(i + FILES_PER_RUN)) results.push(errored(file, `not checked: ${reason}`))
       break
     }
   }

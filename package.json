@@ -1,6 +1,6 @@
 {
   "name": "beliq-validate-action",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "GitHub Action that validates e-invoices in CI with beliq and shows how deep each check went.",
   "type": "module",

@@ -55,7 +55,7 @@ The default `files` glob matches XML only. To check hybrid ZUGFeRD/Factur-X PDFs
 | `fail-on` | no | `error` | Severity threshold that fails the job: `error` or `warning`. |
 | `api-key` | yes | | Your beliq API key. Pass it from a repository secret. |
 | `base-url` | no | | Override the beliq API base URL (self-hosted deployments only). |
-| `cli-version` | no | <!-- renovate: datasource=npm depName=beliq-cli --> `0.4.1` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
+| `cli-version` | no | <!-- renovate: datasource=npm depName=beliq-cli --> `0.5.0` | Version of `beliq-cli` to run (an exact version or an npm dist-tag). Defaults to the exact version this action release was tested against; pass `latest` to follow the CLI instead. |
 
 A `format` or `fail-on` value outside the listed ones fails the step before any file is sent.
 
@@ -75,6 +75,7 @@ A `format` or `fail-on` value outside the listed ones fails the step before any 
 - If no file matches `files`, the run logs a warning and passes: an empty match is not a failed check.
 - Each run appends a Markdown table to the job's step summary: one row per file with its format, check depth, error/warning counts, and verdict. The verdict is the API's own word, `valid` or `invalid`. The check depth is the badge label the API gave the verdict, or `-` where it stated none; what each label means is at https://docs.beliq.eu/compliance/how-verification-works/. For a PDF the verdict is about the XML embedded in it, and the row says so.
 - Files go to `beliq-cli` in batches of up to 100 per process. A refused key, a forbidden request or a rate limit stops the run: every file of that batch gets the error in place of its verdict, already checked ones included, and the files not yet sent are reported as not checked, rather than each spending another call on the same answer.
+- An outage stops the run too. With the default `cli-version`, the CLI retries an outage before it gives up, so a step that meets one waits that long first. Which failures count as an outage, and how long the CLI retries them: https://github.com/beliq-eu/beliq-cli#exit-codes. A misspelt `base-url` counts as one too. When the CLI gives up, the file it gave up on gets the error, the files after it in that batch are reported as not checked, and so is every batch not yet sent, with that file's error.
 
 ## Versioning
 
