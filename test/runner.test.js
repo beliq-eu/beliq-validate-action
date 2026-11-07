@@ -172,6 +172,7 @@ describe('classifyRun over a live beliq-cli 0.4.0 batch', () => {
     rulesetChannel: 'dropped: which channel served the verdict; the CLI prints it',
     rulesetFellBack: 'dropped: which channel served the verdict; the CLI prints it',
     rulesetSunsetsOn: 'dropped: which channel served the verdict; the CLI prints it',
+    rulesetSupersededOn: 'dropped: the RULESET_SUPERSEDED warning beside it names the date, and counts in warnings',
   }
 
   it('carries the badge label of each verdict, and null where the API sent none', () => {
