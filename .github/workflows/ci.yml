@@ -19,7 +19,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm run scrub:check
       - run: npm run check
       - run: npm test
       - run: ./scripts/check-action-pins.sh

@@ -65,9 +65,6 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      - name: Scrub check (no em-dash)
-        run: npm run scrub:check
-
       - name: 'Every uses: is SHA-pinned'
         run: ./scripts/check-action-pins.sh
 

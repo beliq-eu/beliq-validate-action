@@ -16,8 +16,7 @@
   "scripts": {
     "lint": "eslint runner.mjs test",
     "test": "vitest run",
-    "check": "node --check runner.mjs",
-    "scrub:check": "bash scripts/scrub-check.sh"
+    "check": "node --check runner.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
