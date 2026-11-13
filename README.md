@@ -90,7 +90,6 @@ Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, which checks the tr
 ```bash
 npm install
 npm run lint
-npm run scrub:check   # no em-dash
 npm run check         # runner.mjs parses
 npm test              # pure-logic unit tests, no network
 ./scripts/check-action-pins.sh   # every uses: names a commit SHA
