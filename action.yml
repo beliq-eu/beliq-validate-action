@@ -26,7 +26,7 @@ inputs:
     description: 'Your beliq API key. Pass it from a repository secret.'
     required: true
   base-url:
-    description: 'Override the beliq API base URL (self-hosted deployments only).'
+    description: 'The base URL the action sends its beliq API requests to. Empty means the beliq-cli default: BELIQ_BASE_URL, else https://api.beliq.eu.'
     required: false
     default: ''
   cli-version:
