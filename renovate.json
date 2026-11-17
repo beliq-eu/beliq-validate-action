@@ -18,6 +18,11 @@
   ],
   "packageRules": [
     {
+      "description": "Node stays on 22 in the workflows and in action.yml. Moving this repository alone would put beliq's repositories on two Node majors. action.yml's setup-node step also decides which Node this action installs on its users' runners, so moving it is a change for them and goes out with a release, not as a dependency bump. The github-actions manager reads setup-node's `node-version:` input as depName `node` with packageName `actions/node-versions`, and `matchPackageNames` matches the packageName, so `actions/node-versions` is the name that holds the `node-version:` lines. Renovate proposed node 26 as https://github.com/beliq-eu/beliq-validate-action/pull/58 while this repository had no node rule. Node 22 reaches end of life on 2027-04-30 (nodejs/Release schedule.json), so this hold is temporary: lift it in the planned move of every beliq repository to a newer Node major before that date, not on its own.",
+      "matchPackageNames": ["node", "@types/node", "actions/node-versions"],
+      "allowedVersions": "<23.0.0"
+    },
+    {
       "description": "Auto-merge minor updates too, once the required checks pass. The default branch of this repository carries a required status check set (the guard checks and the repository's own test check), so a green pull request means named checks ran and passed, not that nothing ran. Measured on 2026-11-02 with `GET /repos/{owner}/{repo}/rules/branches/main`; check it again before copying this rule to another repository. The two rules below take exceptions out, so they have to stay below this one.",
       "matchUpdateTypes": ["minor"],
       "automerge": true
