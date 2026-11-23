@@ -24,4 +24,4 @@ jobs:
       - run: ./scripts/check-action-pins.sh
 
   guard:
-    uses: beliq-eu/.github/.github/workflows/guard.yml@9f552c747edbbb0cef2a8b2f5c732fa658a55fcc # main
+    uses: beliq-eu/.github/.github/workflows/guard.yml@6a7430b0ec6fb94506862b5460343d2d04873cb1 # main
