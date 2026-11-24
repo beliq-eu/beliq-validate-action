@@ -56,7 +56,7 @@ runs:
   steps:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        node-version: '22'
+        node-version: '26'
     - id: run
       shell: bash
       run: node "$GITHUB_ACTION_PATH/runner.mjs"
