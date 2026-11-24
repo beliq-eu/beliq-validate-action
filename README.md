@@ -44,7 +44,7 @@ The default `files` glob matches XML only. To check hybrid ZUGFeRD/Factur-X PDFs
 ## Requirements
 
 - **Linux or macOS runners.** Windows runners are not supported.
-- **Node.js 22, set up by the action.** It runs `actions/setup-node` with Node 22, and that Node stays first on the `PATH` for the rest of the job. If a later step needs a different version, run `actions/setup-node` again after this action.
+- **Node.js 26, set up by the action.** It runs `actions/setup-node` with Node 26, and that Node stays first on the `PATH` for the rest of the job. If a later step needs a different version, run `actions/setup-node` again after this action.
 
 ## Inputs
 
